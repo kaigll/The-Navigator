@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <ArduinoBLE.h>
 
+#include <HCSR04.h>
+
 BLEService controlService("180A"); // BLE LED Service
 
 // BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by central
@@ -30,11 +32,21 @@ void loop() {
   // listen for BLE peripherals to connect:
   BLEDevice central = BLE.central();
 
+  UltraSonicDistanceSensor us1 = UltraSonicDistanceSensor(P0_23, P0_23, 400U, 0UL);
+  while (true) {
+    delay(1000);
+    
+  }
+
   // if a central is connected to peripheral:
   if (central) {
     Serial.print("Connected to central: ");
     // print the central's MAC address:
     Serial.println(central.address());
+    
+    Serial.println(us1.measureDistanceCm());
+
+
 
     // while the central is still connected to peripheral:
     while (central.connected()) {
