@@ -1,19 +1,20 @@
 /*
   HCSR04 - Library for arduino, for HC-SR04 ultrasonic distance sensor.
   Created by Martin Sosic, June 11, 2016.
+
+  Source: https://github.com/Martinsos/arduino-lib-hc-sr04
+
+  Modified by Kai Gledhill-Lawson to accmomodate for a bridged trigger and echo pin
 */
 
 #include "Arduino.h"
 #include "HCSR04.h"
 
 UltraSonicDistanceSensor::UltraSonicDistanceSensor(
-        byte triggerPin, byte echoPin, unsigned short maxDistanceCm, unsigned long maxTimeoutMicroSec) {
+        byte triggerPin, unsigned short maxDistanceCm, unsigned long maxTimeoutMicroSec) {
     this->triggerPin = triggerPin;
-    this->echoPin = echoPin;
     this->maxDistanceCm = maxDistanceCm;
     this->maxTimeoutMicroSec = maxTimeoutMicroSec;
-    pinMode(triggerPin, OUTPUT);
-    pinMode(echoPin, INPUT);
 }
 
 float UltraSonicDistanceSensor::measureDistanceCm() {
@@ -23,7 +24,7 @@ float UltraSonicDistanceSensor::measureDistanceCm() {
 
 float UltraSonicDistanceSensor::measureDistanceCm(float temperature) {
     unsigned long maxDistanceDurationMicroSec;
-
+    pinMode(triggerPin, OUTPUT);
     // Make sure that trigger pin is LOW.
     digitalWrite(triggerPin, LOW);
     delayMicroseconds(2);
@@ -31,6 +32,7 @@ float UltraSonicDistanceSensor::measureDistanceCm(float temperature) {
     digitalWrite(triggerPin, HIGH);
     delayMicroseconds(10);
     digitalWrite(triggerPin, LOW);
+    pinMode(triggerPin, INPUT);
     float speedOfSoundInCmPerMicroSec = 0.03313 + 0.0000606 * temperature; // Cair ≈ (331.3 + 0.606 ⋅ ϑ) m/s
 
     // Compute max delay based on max distance with 25% margin in microseconds
@@ -40,7 +42,7 @@ float UltraSonicDistanceSensor::measureDistanceCm(float temperature) {
     }
 
     // Measure the length of echo signal, which is equal to the time needed for sound to go there and back.
-    unsigned long durationMicroSec = pulseIn(echoPin, HIGH, maxDistanceDurationMicroSec); // can't measure beyond max distance
+    unsigned long durationMicroSec = pulseIn(triggerPin, HIGH, maxDistanceDurationMicroSec); // can't measure beyond max distance
 
     float distanceCm = durationMicroSec / 2.0 * speedOfSoundInCmPerMicroSec;
     if (distanceCm == 0 || distanceCm > maxDistanceCm) {

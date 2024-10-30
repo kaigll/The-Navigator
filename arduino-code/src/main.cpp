@@ -8,6 +8,9 @@ BLEService controlService("180A"); // BLE LED Service
 // BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by central
 BLEByteCharacteristic directionCharacteristic("1337", BLERead | BLEWrite);
 
+byte sensorPin = 7; // represents D7 - P0.23
+UltraSonicDistanceSensor us1(sensorPin);
+
 void setup() {
   Serial.begin(115200);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -26,27 +29,30 @@ void setup() {
   BLE.advertise();
 
   Serial.println("Started BLE Robot");
+  Serial.begin(9600);
+  pinMode(sensorPin, OUTPUT);
 }
 
 void loop() {
-  // listen for BLE peripherals to connect:
-  BLEDevice central = BLE.central();
-
-  UltraSonicDistanceSensor us1 = UltraSonicDistanceSensor(P0_23, P0_23, 400U, 0UL);
+  bluetoothTest();
   while (true) {
     delay(1000);
-    
+    float distance = us1.measureDistanceCm();
+    Serial.println(distance);
   }
+}
 
+/* 
+Arduino Bluetooh example code
+*/
+void bluetoothTest() {
+  // listen for BLE peripherals to connect:
+  BLEDevice central = BLE.central();
   // if a central is connected to peripheral:
   if (central) {
     Serial.print("Connected to central: ");
     // print the central's MAC address:
     Serial.println(central.address());
-    
-    Serial.println(us1.measureDistanceCm());
-
-
 
     // while the central is still connected to peripheral:
     while (central.connected()) {
