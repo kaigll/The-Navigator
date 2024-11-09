@@ -13,37 +13,6 @@ byte usr1Pin = 7; // represents D7 - P0.23
 UltraSonicDistanceSensor us1(usr1Pin);
 GPY0E02B ir1;
 
-void setup()
-{
-  Serial.begin(9600);
-  ir1.selectBus(0);
-  /*pinMode(LED_BUILTIN, OUTPUT);
-  if (!BLE.begin()) {
-    Serial.println("Could not start BLE!");
-    exit(1);
-  }
-  // set advertised local name and service UUID:
-  BLE.setLocalName("The Navigator");
-  BLE.setAdvertisedService(controlService);
-  controlService.addCharacteristic(directionCharacteristic);
-  BLE.addService(controlService);
-  // set the initial value for the characteristic:
-  directionCharacteristic.writeValue(0);
-  // start advertising
-  BLE.advertise();
-  */
-  Serial.println("Started BLE Robot");
-}
-
-/*
-Main Loop
-*/
-void loop()
-{
-  void readIRSensor();
-  void readUltrasonicSensor();
-}
-
 /*
 Read from ir1
 */
@@ -142,4 +111,37 @@ void bluetoothTest()
     Serial.println(central.address());
     digitalWrite(LED_BUILTIN, LOW); // will turn the LED off
   }
+}
+
+
+
+void setup()
+{
+  Serial.begin(9600);
+  ir1.selectBus(0);
+  /*pinMode(LED_BUILTIN, OUTPUT);
+  if (!BLE.begin()) {
+    Serial.println("Could not start BLE!");
+    exit(1);
+  }
+  // set advertised local name and service UUID:
+  BLE.setLocalName("The Navigator");
+  BLE.setAdvertisedService(controlService);
+  controlService.addCharacteristic(directionCharacteristic);
+  BLE.addService(controlService);
+  // set the initial value for the characteristic:
+  directionCharacteristic.writeValue(0);
+  // start advertising
+  BLE.advertise();
+  */
+  Serial.println("Started BLE Robot");
+}
+
+/*
+Main Loop
+*/
+void loop()
+{
+  readIRSensor();
+  readUltrasonicSensor();
 }
