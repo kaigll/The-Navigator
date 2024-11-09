@@ -14,44 +14,6 @@ UltraSonicDistanceSensor us1(usr1Pin);
 GPY0E02B ir1;
 
 /*
-Read from ir1
-*/
-void readIRSensor()
-{
-  float distance = ir1.measureDistanceCm();
-  if (distance != -1)
-  {
-    Serial.print("Distance: ");
-    Serial.print(distance);
-    Serial.println(" cm");
-  }
-  else
-  {
-    Serial.println("Error reading sensor data");
-  }
-  delay(500);
-}
-
-/*
-Read from us1
-*/
-void readUltrasonicSensor()
-{
-  float distance = us1.measureDistanceCm();
-  if (distance != -1)
-  {
-    Serial.print("Distance: ");
-    Serial.print(distance);
-    Serial.println(" cm");
-  }
-  else
-  {
-    Serial.println("Error reading sensor data");
-  }
-  delay(1000);
-}
-
-/*
 Arduino Bluetooh example code
 */
 void bluetoothTest()
@@ -113,13 +75,49 @@ void bluetoothTest()
   }
 }
 
+/*
+Read from ir1
+*/
+void readIRSensor()
+{
+  float distance = ir1.measureDistanceCm();
+  if (distance != -1)
+  {
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
+  }
+  else
+  {
+    Serial.println("Error reading sensor data");
+  }
+}
+
+/*
+Read from us1
+*/
+void readUltrasonicSensor()
+{
+  float distance = us1.measureDistanceCm();
+  if (distance != -1)
+  {
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
+  }
+  else
+  {
+    Serial.println("Error reading sensor data");
+  }
+}
 
 
 void setup()
 {
   Serial.begin(9600);
   ir1.selectBus(0);
-  /*pinMode(LED_BUILTIN, OUTPUT);
+  /*
+  pinMode(LED_BUILTIN, OUTPUT);
   if (!BLE.begin()) {
     Serial.println("Could not start BLE!");
     exit(1);
@@ -144,4 +142,7 @@ void loop()
 {
   readIRSensor();
   readUltrasonicSensor();
+  delay(1000);
 }
+
+
