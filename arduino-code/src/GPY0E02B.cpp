@@ -25,5 +25,8 @@ float GPY0E02B::measureDistanceCm() {
   i2c.read(sensorAddress, data, 2);
 
   int distance = (data[0] << 8) | data[1];
+
+  // Distance[11:4]*16+Distance[3:0]/16/2^n
+  // n: shift bit (Register 0x35)
   return distance *0.001; // confusing scale factor of 1000?????
 }

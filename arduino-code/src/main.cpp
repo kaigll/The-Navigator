@@ -13,75 +13,6 @@ byte usr1Pin = 7; // represents D7 - P0.23
 UltraSonicDistanceSensor us1(usr1Pin);
 GPY0E02B ir1;
 
-void setup()
-{
-  Serial.begin(9600);
-  ir1.selectBus(0);
-  /*pinMode(LED_BUILTIN, OUTPUT);
-  if (!BLE.begin()) {
-    Serial.println("Could not start BLE!");
-    exit(1);
-  }
-  // set advertised local name and service UUID:
-  BLE.setLocalName("The Navigator");
-  BLE.setAdvertisedService(controlService);
-  controlService.addCharacteristic(directionCharacteristic);
-  BLE.addService(controlService);
-  // set the initial value for the characteristic:
-  directionCharacteristic.writeValue(0);
-  // start advertising
-  BLE.advertise();
-  */
-  Serial.println("Started BLE Robot");
-}
-
-/*
-Main Loop
-*/
-void loop()
-{
-  void readIRSensor();
-  void readUltrasonicSensor();
-}
-
-/*
-Read from ir1
-*/
-void readIRSensor()
-{
-  float distance = ir1.measureDistanceCm();
-  if (distance != -1)
-  {
-    Serial.print("Distance: ");
-    Serial.print(distance);
-    Serial.println(" cm");
-  }
-  else
-  {
-    Serial.println("Error reading sensor data");
-  }
-  delay(500);
-}
-
-/*
-Read from us1
-*/
-void readUltrasonicSensor()
-{
-  float distance = us1.measureDistanceCm();
-  if (distance != -1)
-  {
-    Serial.print("Distance: ");
-    Serial.print(distance);
-    Serial.println(" cm");
-  }
-  else
-  {
-    Serial.println("Error reading sensor data");
-  }
-  delay(1000);
-}
-
 /*
 Arduino Bluetooh example code
 */
@@ -143,3 +74,75 @@ void bluetoothTest()
     digitalWrite(LED_BUILTIN, LOW); // will turn the LED off
   }
 }
+
+/*
+Read from ir1
+*/
+void readIRSensor()
+{
+  float distance = ir1.measureDistanceCm();
+  if (distance != -1)
+  {
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
+  }
+  else
+  {
+    Serial.println("Error reading sensor data");
+  }
+}
+
+/*
+Read from us1
+*/
+void readUltrasonicSensor()
+{
+  float distance = us1.measureDistanceCm();
+  if (distance != -1)
+  {
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
+  }
+  else
+  {
+    Serial.println("Error reading sensor data");
+  }
+}
+
+
+void setup()
+{
+  Serial.begin(9600);
+  ir1.selectBus(0);
+  /*
+  pinMode(LED_BUILTIN, OUTPUT);
+  if (!BLE.begin()) {
+    Serial.println("Could not start BLE!");
+    exit(1);
+  }
+  // set advertised local name and service UUID:
+  BLE.setLocalName("The Navigator");
+  BLE.setAdvertisedService(controlService);
+  controlService.addCharacteristic(directionCharacteristic);
+  BLE.addService(controlService);
+  // set the initial value for the characteristic:
+  directionCharacteristic.writeValue(0);
+  // start advertising
+  BLE.advertise();
+  */
+  Serial.println("Started BLE Robot");
+}
+
+/*
+Main Loop
+*/
+void loop()
+{
+  readIRSensor();
+  readUltrasonicSensor();
+  delay(1000);
+}
+
+
