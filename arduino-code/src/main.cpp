@@ -13,6 +13,29 @@ byte usr1Pin = 7; // represents D7 - P0.23
 UltraSonicDistanceSensor us1(usr1Pin);
 GPY0E02B ir1;
 
+mbed::DigitalOut MotorAPower(P0_27);
+mbed::DigitalOut MotorADir(P0_4);
+mbed::PwmOut MotorAPWM(P0_27); // Set this pin as PWM
+
+void bluetoothInit()
+{
+  pinMode(LED_BUILTIN, OUTPUT);
+  if (!BLE.begin())
+  {
+    Serial.println("Could not start BLE!");
+    exit(1);
+  }
+  // set advertised local name and service UUID:
+  BLE.setLocalName("The Navigator");
+  BLE.setAdvertisedService(controlService);
+  controlService.addCharacteristic(directionCharacteristic);
+  BLE.addService(controlService);
+  // set the initial value for the characteristic:
+  directionCharacteristic.writeValue(0);
+  // start advertising
+  BLE.advertise();
+}
+
 /*
 Arduino Bluetooh example code
 */
@@ -111,27 +134,10 @@ void readUltrasonicSensor()
   }
 }
 
-
 void setup()
 {
   Serial.begin(9600);
-  ir1.selectBus(0);
-  /*
-  pinMode(LED_BUILTIN, OUTPUT);
-  if (!BLE.begin()) {
-    Serial.println("Could not start BLE!");
-    exit(1);
-  }
-  // set advertised local name and service UUID:
-  BLE.setLocalName("The Navigator");
-  BLE.setAdvertisedService(controlService);
-  controlService.addCharacteristic(directionCharacteristic);
-  BLE.addService(controlService);
-  // set the initial value for the characteristic:
-  directionCharacteristic.writeValue(0);
-  // start advertising
-  BLE.advertise();
-  */
+  // ir1.selectBus(0);
   Serial.println("Started BLE Robot");
 }
 
@@ -140,9 +146,12 @@ Main Loop
 */
 void loop()
 {
-  readIRSensor();
-  readUltrasonicSensor();
-  delay(1000);
+  MotorADir = 1;
+  MotorAPower = 1;
+  delay(10000);
+  MotorAPower = 0;
+  delay(10000);
+  MotorADir = 0;
+  MotorAPower = 1;
+  delay(10000);
 }
-
-
