@@ -13,9 +13,10 @@ byte usr1Pin = 7; // represents D7 - P0.23
 UltraSonicDistanceSensor us1(usr1Pin);
 GPY0E02B ir1;
 
-mbed::DigitalOut MotorAPower(P0_27);
 mbed::DigitalOut MotorADir(P0_4);
-mbed::PwmOut MotorAPWM(P0_27); // Set this pin as PWM
+mbed::PwmOut MotorAPWM(P0_27);
+mbed::DigitalOut MotorBDir(P0_5);
+mbed::PwmOut MotorBPWM(P1_2);
 
 void bluetoothInit()
 {
@@ -134,10 +135,28 @@ void readUltrasonicSensor()
   }
 }
 
+void moveMotorA(int direction, float speed, int time)
+{
+  MotorADir = direction;
+  MotorAPWM.write(speed);
+  delay(time);
+  MotorAPWM.write(0.0f);
+}
+
+void moveMotorB(int direction, float speed, int time)
+{
+  MotorBDir = direction;
+  MotorBPWM.write(speed);
+  delay(time);
+  MotorBPWM.write(0.0f);
+}
+
 void setup()
 {
   Serial.begin(9600);
   // ir1.selectBus(0);
+  MotorAPWM.period_ms(1);
+  MotorBPWM.period_ms(1);
   Serial.println("Started BLE Robot");
 }
 
@@ -146,12 +165,7 @@ Main Loop
 */
 void loop()
 {
-  MotorADir = 1;
-  MotorAPower = 1;
-  delay(10000);
-  MotorAPower = 0;
-  delay(10000);
-  MotorADir = 0;
-  MotorAPower = 1;
-  delay(10000);
+  moveMotorA(1, 0.5f, 1000);
+  moveMotorB(1, 0.5f, 1000);
+  delay(1000);
 }
