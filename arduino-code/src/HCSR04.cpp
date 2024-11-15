@@ -7,7 +7,6 @@
   Modified by Kai Gledhill-Lawson to accmomodate for a bridged trigger and echo pin
 */
 
-#include "Arduino.h"
 #include "HCSR04.h"
 
 UltraSonicDistanceSensor::UltraSonicDistanceSensor(

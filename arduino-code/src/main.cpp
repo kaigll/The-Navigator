@@ -13,10 +13,14 @@ byte usr1Pin = 7; // represents D7 - P0.23
 UltraSonicDistanceSensor us1(usr1Pin);
 GPY0E02B ir1;
 
+// a -> left side
 mbed::DigitalOut MotorADir(P0_4);
 mbed::PwmOut MotorAPWM(P0_27);
+// b -> right side
 mbed::DigitalOut MotorBDir(P0_5);
 mbed::PwmOut MotorBPWM(P1_2);
+
+float speed = 0;
 
 void bluetoothInit()
 {
@@ -151,6 +155,78 @@ void moveMotorB(int direction, float speed, int time)
   MotorBPWM.write(0.0f);
 }
 
+void moveMotorAB(int directionA, int directionB, float speed, int time)
+{
+  MotorADir = directionA;
+  MotorBDir = directionB;
+  MotorAPWM.write(speed);
+  MotorBPWM.write(speed);
+  delay(time);
+  MotorAPWM.write(0.0f);
+  MotorBPWM.write(0.0f);
+  
+}
+
+void keyboardControls()
+{
+  char input;
+  
+  if(Serial.available()) 
+  {
+    input = Serial.read();
+    Serial.println(input, HEX);
+  }
+
+  switch (input)
+  {
+  case 'w':
+    moveMotorAB(1, 0, speed, 1000);
+    break;
+  case 'a':
+    moveMotorAB(1, 1, speed, 1000);
+    break;
+  case 's':
+    moveMotorAB(0, 1, speed, 1000);
+    break;
+  case 'd':
+    moveMotorAB(0, 0, speed, 1000);
+    break;
+  case '1':
+    speed = 0.1f;
+    break;
+  case '2':
+    speed = 0.2f;
+    break;
+  case '3':
+    speed = 0.3f;
+    break;
+  case '4':
+    speed = 0.4f;
+    break;
+  case '5':
+    speed = 0.5f;
+    break;
+  case '6':
+    speed = 0.6f;
+    break;
+  case '7':
+    speed = 0.7f;
+    break;
+  case '8':
+    speed = 0.8f;
+    break;
+  case '9':
+    speed = 0.9f;
+    break;
+  case '0':
+    speed = 1.0f;
+    break;
+  default:
+    break;
+  }
+}
+
+
 void setup()
 {
   Serial.begin(9600);
@@ -165,7 +241,5 @@ Main Loop
 */
 void loop()
 {
-  moveMotorA(1, 0.5f, 1000);
-  moveMotorB(1, 0.5f, 1000);
-  delay(1000);
+  keyboardControls();
 }
