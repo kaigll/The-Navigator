@@ -4,20 +4,23 @@
 
   Source: https://github.com/Martinsos/arduino-lib-hc-sr04
 
-  Modified by Kai Gledhill-Lawson to accmomodate for a bridged trigger and echo pin
+  Modified by Kai Gledhill-Lawson to accmomodate for a bridged trigger and echo
+  pin
 */
 
 #include "HCSR04.h"
 
 UltraSonicDistanceSensor::UltraSonicDistanceSensor(
-        byte triggerPin, unsigned short maxDistanceCm, unsigned long maxTimeoutMicroSec) {
+    byte triggerPin, unsigned short maxDistanceCm,
+    unsigned long maxTimeoutMicroSec) {
     this->triggerPin = triggerPin;
     this->maxDistanceCm = maxDistanceCm;
     this->maxTimeoutMicroSec = maxTimeoutMicroSec;
 }
 
 float UltraSonicDistanceSensor::measureDistanceCm() {
-    //Using the approximate formula 19.307°C results in roughly 343m/s which is the commonly used value for air.
+    // Using the approximate formula 19.307°C results in roughly 343m/s which is
+    // the commonly used value for air.
     return measureDistanceCm(19.307);
 }
 
@@ -27,25 +30,32 @@ float UltraSonicDistanceSensor::measureDistanceCm(float temperature) {
     // Make sure that trigger pin is LOW.
     digitalWrite(triggerPin, LOW);
     delayMicroseconds(2);
-    // Hold trigger for 10 microseconds, which is signal for sensor to measure distance.
+    // Hold trigger for 10 microseconds, which is signal for sensor to measure
+    // distance.
     digitalWrite(triggerPin, HIGH);
     delayMicroseconds(10);
     digitalWrite(triggerPin, LOW);
     pinMode(triggerPin, INPUT);
-    float speedOfSoundInCmPerMicroSec = 0.03313 + 0.0000606 * temperature; // Cair ≈ (331.3 + 0.606 ⋅ ϑ) m/s
+    float speedOfSoundInCmPerMicroSec =
+        0.03313 + 0.0000606 * temperature; // Cair ≈ (331.3 + 0.606 ⋅ ϑ) m/s
 
     // Compute max delay based on max distance with 25% margin in microseconds
-    maxDistanceDurationMicroSec = 2.5 * maxDistanceCm / speedOfSoundInCmPerMicroSec;
+    maxDistanceDurationMicroSec =
+        2.5 * maxDistanceCm / speedOfSoundInCmPerMicroSec;
     if (maxTimeoutMicroSec > 0) {
-    	maxDistanceDurationMicroSec = min(maxDistanceDurationMicroSec, maxTimeoutMicroSec);
+        maxDistanceDurationMicroSec =
+            min(maxDistanceDurationMicroSec, maxTimeoutMicroSec);
     }
 
-    // Measure the length of echo signal, which is equal to the time needed for sound to go there and back.
-    unsigned long durationMicroSec = pulseIn(triggerPin, HIGH, maxDistanceDurationMicroSec); // can't measure beyond max distance
+    // Measure the length of echo signal, which is equal to the time needed for
+    // sound to go there and back.
+    unsigned long durationMicroSec = pulseIn(
+        triggerPin, HIGH,
+        maxDistanceDurationMicroSec); // can't measure beyond max distance
 
     float distanceCm = durationMicroSec / 2.0 * speedOfSoundInCmPerMicroSec;
     if (distanceCm == 0 || distanceCm > maxDistanceCm) {
-        return -1.0 ;
+        return -1.0;
     } else {
         return distanceCm;
     }
