@@ -16,7 +16,6 @@ GPY0E02B ir1;
 GPY0E02B ir2;
 
 Motor motor(P0_4, P0_27, P0_5, P1_2);
-
 float speed = 0;
 
 void bluetoothInit() {
@@ -197,11 +196,6 @@ void setup() {
 Main Loop
 */
 void loop() {
-    ir1.selectBus(0);
-    readIRSensor(ir1);
-    ir1.selectBus(1);
-    readIRSensor(ir1);
-    readUltrasonicSensor(us1);
-    readUltrasonicSensor(us2);
-    delay(1000);
+    motor.countPulses();
+    delay(500);
 }

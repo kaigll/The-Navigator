@@ -41,12 +41,24 @@ public:
      */
     void stopMotorB();
 
+    void countPulseA();
+
+    void countPulseB();
+
+    void countPulses();
+
 private:
     mbed::DigitalOut motorADir; // Digital pin for motor A direction control
     mbed::PwmOut motorAPWM;     // PWM pin for motor A speed control
     mbed::DigitalOut motorBDir; // Digital pin for motor B direction control
     mbed::PwmOut motorBPWM;     // PWM pin for motor B speed control
     rtos::Mutex mutex;          // Single mutex to ensure atomic updates
+
+    
+    long int shaftRevA;
+    long int encoderCountA;
+    long int shaftRevB;
+    long int encoderCountB;
 };
 
 #endif
