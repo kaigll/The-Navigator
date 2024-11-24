@@ -4,8 +4,8 @@
 
 #include "Motor.h"
 
-mbed::InterruptIn EncA(P1_11);
-mbed::InterruptIn EncB(P1_12);
+mbed::InterruptIn encoderA(P1_11);
+mbed::InterruptIn encoderB(P1_12);
 
 Motor::Motor(PinName motorADir, PinName motorBDir, PinName motorAPWM,
              PinName motorBPWM)
@@ -29,21 +29,51 @@ void Motor::stopMotorA() { motorAPWM.write(0.0f); }
 
 void Motor::stopMotorB() { motorBPWM.write(0.0f); }
 
-void Motor::countPulses() {
-  EncA.rise(mbed::callback(this, &Motor::countPulseA));
-  Serial.println(encoderCountA);
+void Motor::startCounting() {
+    timer.start();
+    encoderA.rise(mbed::callback(this, &Motor::countPulseA));
+    encoderB.rise(mbed::callback(this, &Motor::countPulseB));
 }
 
-void Motor::countPulseA(){
-   if(motorADir == 0)
-     encoderCountA++;
-   else
-     encoderCountA--;
+void Motor::countPulseA() {
+    if (motorADir == 0)
+        encoderCountA++;
+    else
+        encoderCountA--;
 }
 
-void Motor::countPulseB(){
-   if(motorBDir == 0)
-     encoderCountB++;
-   else
-     encoderCountB--;
+void Motor::countPulseB() {
+    if (motorBDir == 0)
+        encoderCountB++;
+    else
+        encoderCountB--;
+}
+
+float Motor::calculateDistanceA() {
+    return (encoderCountA * wheelCircumference) / pulsesPerRevolution;
+}
+float Motor::calculateDistanceB() {
+    return (encoderCountB * wheelCircumference) / pulsesPerRevolution;
+}
+
+float Motor::calculateSpeedA() {
+    float deltaTime = timer.read();
+    timer.reset();
+
+    int deltaPulsesA = encoderCountA - lastEncoderCountA;
+
+    lastEncoderCountA = encoderCountA;
+    float distanceA = (deltaPulsesA * wheelCircumference) / pulsesPerRevolution;
+    return distanceA / deltaTime;
+}
+
+float Motor::calculateSpeedB() {
+    float deltaTime = timer.read();
+    timer.reset();
+
+    int deltaPulsesB = encoderCountB - lastEncoderCountB;
+
+    lastEncoderCountB = encoderCountB;
+    float distanceB = (deltaPulsesB * wheelCircumference) / pulsesPerRevolution;
+    return distanceB / deltaTime;
 }

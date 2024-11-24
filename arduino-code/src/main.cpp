@@ -12,8 +12,7 @@ BLEByteCharacteristic directionCharacteristic("1337", BLERead | BLEWrite);
 
 UltraSonicDistanceSensor us1(7); // D7 on graph
 UltraSonicDistanceSensor us2(6); // D6 on graph
-GPY0E02B ir1;
-GPY0E02B ir2;
+GPY0E02B irBus;
 
 Motor motor(P0_4, P0_27, P0_5, P1_2);
 float speed = 0;
@@ -103,12 +102,12 @@ void bluetoothTest() {
 }
 
 /*
-Read from ir1
+Read from ir sensor on i2c
 */
 void readIRSensor(GPY0E02B ir) {
     float distance = ir.measureDistanceCm();
     if (distance != -1) {
-        Serial.print("ir Distance: ");
+        Serial.print("Distance: ");
         Serial.print(distance);
         Serial.println(" cm");
     } else {
@@ -117,12 +116,12 @@ void readIRSensor(GPY0E02B ir) {
 }
 
 /*
-Read from us1
+Read from ultrasonic sensor
 */
 void readUltrasonicSensor(UltraSonicDistanceSensor us) {
     float distance = us.measureDistanceCm();
     if (distance != -1) {
-        Serial.print("us Distance: ");
+        Serial.print("Distance: ");
         Serial.print(distance);
         Serial.println(" cm");
     } else {
@@ -189,13 +188,13 @@ void keyboardControls() {
 
 void setup() {
     Serial.begin(9600);
-    Serial.println("Started Robot");
+    Serial.println("Started BLE Robot");
 }
 
 /*
 Main Loop
 */
 void loop() {
-    motor.countPulses();
+    motor.startCounting();
     delay(500);
 }

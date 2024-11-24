@@ -41,11 +41,19 @@ public:
      */
     void stopMotorB();
 
+    void startCounting();
+
     void countPulseA();
 
     void countPulseB();
 
-    void countPulses();
+    float calculateDistanceA();
+
+    float calculateDistanceB();
+
+    float calculateSpeedA();
+
+    float calculateSpeedB();
 
 private:
     mbed::DigitalOut motorADir; // Digital pin for motor A direction control
@@ -59,6 +67,14 @@ private:
     long int encoderCountA;
     long int shaftRevB;
     long int encoderCountB;
+    volatile int lastEncoderCountA = 0;
+    volatile int lastEncoderCountB = 0;
+
+    const float wheelDiameter = 4.7;
+    const float wheelCircumference = 14.7654854719; // wheelDiameter * pi
+    const int pulsesPerRevolution = 660;
+
+    mbed::Timer timer;
 };
 
 #endif
