@@ -26,7 +26,7 @@ firmware_relative_path = os.path.join(
 FIRMWARE_PATH = os.path.abspath(firmware_relative_path)
 FIRMWARE_URL = "http://localhost:8000/firmware.bin"
 
-print("Firmware Path:", FIRMWARE_PATH) # Print the constructed path
+print("Firmware Path:", FIRMWARE_PATH)  # Print the constructed path
 
 
 # Serve the firmware file
