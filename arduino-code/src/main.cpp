@@ -6,8 +6,7 @@
 
 BLEService controlService("180A"); // BLE LED Service
 
-// BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by
-// central
+// BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by central
 BLEByteCharacteristic directionCharacteristic("1337", BLERead | BLEWrite);
 
 UltraSonicDistanceSensor us1(7); // D7 on graph
@@ -185,7 +184,41 @@ void keyboardControls() {
     }
 }
 
+void moveForward(float speed) {
+    motor.updateMotors(0, 0, speed, speed);
+}
 
+void moveBackward(float speed) {
+    motor.updateMotors(1, 1, speed, speed);
+}
+
+void rotateRight(float speed) {
+    motor.updateMotors(0, 1, speed, speed);
+    thread_sleep_for(1000); // Adjust the timing for a 90-degree rotation based on your setup
+    motor.updateMotors(0, 0, 0, 0); // Stop motors
+}
+
+void rotateLeft(float speed) {
+    motor.updateMotors(1, 0, speed, speed);
+    thread_sleep_for(1000); // Adjust the timing for a 90-degree rotation based on your setup
+    motor.updateMotors(0, 0, 0, 0); // Stop motors
+}
+
+// turn 90 degrees left (clockwise)
+void quarterTurnRight() {
+    float speed = 1;
+    rotateRight(speed);
+}
+
+// turn 90 degrees left (anticlockwise)
+void quarterTurnLeft() {
+    float speed = 1;
+    rotateLeft(speed);
+}
+
+/*
+Main Setup
+*/
 void setup() {
     Serial.begin(9600);
     Serial.println("Started BLE Robot");
