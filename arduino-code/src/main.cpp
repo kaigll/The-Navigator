@@ -13,7 +13,8 @@ UltraSonicDistanceSensor us1(7); // D7 on graph
 UltraSonicDistanceSensor us2(6); // D6 on graph
 GPY0E02B irBus;
 
-Motor motor(P0_4, P0_27, P0_5, P1_2);
+// Motor motor(P0_27, P1_2, P0_4, P0_5);
+Motor motor(P0_4, P0_5, P0_27, P1_2);
 float speed = 0;
 
 void bluetoothInit() {
@@ -184,36 +185,49 @@ void keyboardControls() {
     }
 }
 
-void moveForward(float speed) {
-    motor.updateMotors(0, 0, speed, speed);
+void moveForward(float s) {
+    motor.updateMotors(0, 1, s, s);
 }
 
-void moveBackward(float speed) {
-    motor.updateMotors(1, 1, speed, speed);
+void moveBackward(float s) {
+    motor.updateMotors(0, 1, s, s);
 }
 
-void rotateRight(float speed) {
-    motor.updateMotors(0, 1, speed, speed);
-    thread_sleep_for(1000); // Adjust the timing for a 90-degree rotation based on your setup
-    motor.updateMotors(0, 0, 0, 0); // Stop motors
+void rotateRight(float s) {
+    motor.updateMotors(0, 0, s, s);
+    // thread_sleep_for(1000); // Adjust the timing for a 90-degree rotation based on your setup
+    delay(1000);
+    motor.stopMotorA();
+    motor.stopMotorB();
 }
 
-void rotateLeft(float speed) {
-    motor.updateMotors(1, 0, speed, speed);
-    thread_sleep_for(1000); // Adjust the timing for a 90-degree rotation based on your setup
-    motor.updateMotors(0, 0, 0, 0); // Stop motors
+void rotateLeft(float s) {
+    motor.updateMotors(1, 1, s, s);
+    // thread_sleep_for(1000); // Adjust the timing for a 90-degree rotation based on your setup
+    delay(1000);
+    motor.stopMotorA();
+    motor.stopMotorB();
 }
 
 // turn 90 degrees left (clockwise)
 void quarterTurnRight() {
-    float speed = 1;
-    rotateRight(speed);
+    float s = 0.55; // ~0.5-0.6 obviously use encoders later
+    rotateRight(s);
 }
 
 // turn 90 degrees left (anticlockwise)
 void quarterTurnLeft() {
-    float speed = 1;
-    rotateLeft(speed);
+    float quarterCircumference = 0.25*13.6*PI;
+    motor.updateMotors(1, 1, 0.5f, 0.5f);
+    float distA = motor.calculateDistanceA();
+    float distB = motor.calculateDistanceB();
+    while (distA < quarterCircumference && distB < quarterCircumference) {
+        delay(10);
+        distA = motor.calculateDistanceA();
+        distB = motor.calculateDistanceB();
+    }
+    motor.stopMotorA();
+    motor.stopMotorB();
 }
 
 /*
@@ -221,13 +235,16 @@ Main Setup
 */
 void setup() {
     Serial.begin(9600);
+    motor.setup();
     Serial.println("Started BLE Robot");
+    motor.startCounting();
 }
 
 /*
 Main Loop
 */
 void loop() {
-    motor.startCounting();
-    delay(500);
+    quarterTurnLeft();
+    delay(10000);
+    Serial.println("loop end");
 }

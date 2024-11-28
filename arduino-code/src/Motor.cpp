@@ -10,9 +10,13 @@ mbed::InterruptIn encoderB(P1_12);
 Motor::Motor(PinName motorADir, PinName motorBDir, PinName motorAPWM,
              PinName motorBPWM)
     : motorADir(motorADir), motorBDir(motorBDir), motorAPWM(motorAPWM),
-      motorBPWM(motorBPWM) {
-    this->motorAPWM.period_ms(1);
-    this->motorBPWM.period_ms(1);
+      motorBPWM(motorBPWM) {}
+
+void Motor::setup() {
+    motorAPWM.period_ms(1);
+    motorBPWM.period_ms(1);
+    Serial.println("Motor A PWM period set to 1 ms");
+    Serial.println("Motor B PWM period set to 1 ms");
 }
 
 void Motor::updateMotors(int directionA, int directionB, float speedA,
