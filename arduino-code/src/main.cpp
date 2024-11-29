@@ -1,13 +1,10 @@
 #include <Arduino.h>
 #include <ArduinoBLE.h>
+#include <rtos.h>
+
 #include <GPY0E02B.h>
 #include <HCSR04.h>
 #include <Motor.h>
-
-BLEService controlService("180A"); // BLE LED Service
-
-// BLE LED Switch Characteristic - custom 128-bit UUID, read and writable by central
-BLEByteCharacteristic directionCharacteristic("1337", BLERead | BLEWrite);
 
 UltraSonicDistanceSensor us1(7); // D7 on graph
 UltraSonicDistanceSensor us2(6); // D6 on graph
@@ -17,7 +14,18 @@ GPY0E02B irBus;
 Motor motor(P0_4, P0_5, P0_27, P1_2);
 float speed = 0;
 
-void bluetoothInit() {
+#define FIRMWARE_SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
+#define FIRMWARE_CHARACTERISTIC_UUID "abcdefab-cdef-abcd-efab-cdefabcdefab"
+
+// Initialize the BLE services and characteristics
+BLEService controlService("180A"); // BLE LED Service
+BLEByteCharacteristic directionCharacteristic("1337", BLERead | BLEWrite);
+BLEService firmwareService(FIRMWARE_SERVICE_UUID);
+BLECharacteristic firmwareCharacteristic(FIRMWARE_CHARACTERISTIC_UUID, BLEWrite, 512);
+
+rtos::Thread bluetoothThread;
+
+void bluetoothSetup() {
     pinMode(LED_BUILTIN, OUTPUT);
     if (!BLE.begin()) {
         Serial.println("Could not start BLE!");
@@ -26,78 +34,87 @@ void bluetoothInit() {
     // set advertised local name and service UUID:
     BLE.setLocalName("The Navigator");
     BLE.setAdvertisedService(controlService);
+    // Add characteristics to the control service
     controlService.addCharacteristic(directionCharacteristic);
     BLE.addService(controlService);
+
+    // Add the firmware update service and characteristic
+    firmwareService.addCharacteristic(firmwareCharacteristic);
+    BLE.addService(firmwareService);
     // set the initial value for the characteristic:
     directionCharacteristic.writeValue(0);
     // start advertising
     BLE.advertise();
+
+    Serial.println("BLE services initialized, waiting for connections...");
 }
 
 /*
 Arduino Bluetooh example code
 */
 void bluetoothTest() {
-    // listen for BLE peripherals to connect:
-    BLEDevice central = BLE.central();
-    // if a central is connected to peripheral:
-    if (central) {
-        Serial.print("Connected to central: ");
-        // print the central's MAC address:
-        Serial.println(central.address());
+    while (true) {
+        // listen for BLE peripherals to connect:
+        BLEDevice central = BLE.central();
+        // if a central is connected to peripheral:
+        if (central) {
+            Serial.print("Connected to central: ");
+            // print the central's MAC address:
+            Serial.println(central.address());
 
-        // while the central is still connected to peripheral:
-        while (central.connected()) {
-            // if the remote device wrote to the characteristic,
-            // use the value to control the LED:
-            if (directionCharacteristic.written()) {
-                switch (directionCharacteristic.value()) { // any value other than 0
-                case 1:
-                    Serial.println("Forward");
-                    digitalWrite(LED_BUILTIN,
-                                 HIGH); // will turn the LED on
-                    break;
-                case 2:
-                    Serial.println("Left");
-                    digitalWrite(LED_BUILTIN,
-                                 HIGH); // will turn the LED on
-                    delay(500);
-                    digitalWrite(LED_BUILTIN,
-                                 LOW); // will turn the LED off
-                    delay(500);
-                    digitalWrite(LED_BUILTIN,
-                                 HIGH); // will turn the LED on
-                    delay(500);
-                    digitalWrite(LED_BUILTIN,
-                                 LOW); // will turn the LED off
-                    break;
-                case 3:
-                    Serial.println("Right");
-                    digitalWrite(LED_BUILTIN,
-                                 HIGH); // will turn the LED on
-                    delay(1000);
-                    digitalWrite(LED_BUILTIN,
-                                 LOW); // will turn the LED off
-                    delay(1000);
-                    digitalWrite(LED_BUILTIN,
-                                 HIGH); // will turn the LED on
-                    delay(1000);
-                    digitalWrite(LED_BUILTIN,
-                                 LOW); // will turn the LED off
-                    break;
-                default:
-                    Serial.println(F("Stop"));
-                    digitalWrite(LED_BUILTIN,
-                                 LOW); // will turn the LED off
-                    break;
+            // while the central is still connected to peripheral:
+            while (central.connected()) {
+                // if the remote device wrote to the characteristic,
+                // use the value to control the LED:
+                if (directionCharacteristic.written()) {
+                    switch (directionCharacteristic.value()) { // any value other than 0
+                    case 1:
+                        Serial.println("Forward");
+                        digitalWrite(LED_BUILTIN,
+                                     HIGH); // will turn the LED on
+                        break;
+                    case 2:
+                        Serial.println("Left");
+                        digitalWrite(LED_BUILTIN,
+                                     HIGH); // will turn the LED on
+                        delay(500);
+                        digitalWrite(LED_BUILTIN,
+                                     LOW); // will turn the LED off
+                        delay(500);
+                        digitalWrite(LED_BUILTIN,
+                                     HIGH); // will turn the LED on
+                        delay(500);
+                        digitalWrite(LED_BUILTIN,
+                                     LOW); // will turn the LED off
+                        break;
+                    case 3:
+                        Serial.println("Right");
+                        digitalWrite(LED_BUILTIN,
+                                     HIGH); // will turn the LED on
+                        delay(1000);
+                        digitalWrite(LED_BUILTIN,
+                                     LOW); // will turn the LED off
+                        delay(1000);
+                        digitalWrite(LED_BUILTIN,
+                                     HIGH); // will turn the LED on
+                        delay(1000);
+                        digitalWrite(LED_BUILTIN,
+                                     LOW); // will turn the LED off
+                        break;
+                    default:
+                        Serial.println(F("Stop"));
+                        digitalWrite(LED_BUILTIN,
+                                     LOW); // will turn the LED off
+                        break;
+                    }
                 }
             }
-        }
 
-        // when the central disconnects, print it out:
-        Serial.print(F("Disconnected from central: "));
-        Serial.println(central.address());
-        digitalWrite(LED_BUILTIN, LOW); // will turn the LED off
+            // when the central disconnects, print it out:
+            Serial.print(F("Disconnected from central: "));
+            Serial.println(central.address());
+            digitalWrite(LED_BUILTIN, LOW); // will turn the LED off
+        }
     }
 }
 
@@ -211,33 +228,53 @@ void rotateLeft(float s) {
 
 // turn 90 degrees left (clockwise)
 void quarterTurnRight() {
-    float s = 0.55; // ~0.5-0.6 obviously use encoders later
-    rotateRight(s);
+    float quarterCircumference = 0.25 * 13.8 * PI;
+    motor.updateMotors(0, 0, 0.5f, 0.5f);
+    while (true) {
+        float distA = motor.calculateDistanceA();
+        float distB = motor.calculateDistanceB();
+
+        if (abs(distA) >= quarterCircumference || abs(distB) >= quarterCircumference) {
+            break;
+        }
+        delay(10);
+    }
+    motor.stopMotorA();
+    motor.stopMotorB();
+    motor.resetCount();
 }
 
 // turn 90 degrees left (anticlockwise)
 void quarterTurnLeft() {
-    float quarterCircumference = 0.25*13.6*PI;
+    float quarterCircumference = 0.25 * 13.8 * PI;
     motor.updateMotors(1, 1, 0.5f, 0.5f);
-    float distA = motor.calculateDistanceA();
-    float distB = motor.calculateDistanceB();
-    while (distA < quarterCircumference && distB < quarterCircumference) {
+    while (true) {
+        float distA = motor.calculateDistanceA();
+        float distB = motor.calculateDistanceB();
+
+        if (abs(distA) >= quarterCircumference || abs(distB) >= quarterCircumference) {
+            break;
+        }
         delay(10);
-        distA = motor.calculateDistanceA();
-        distB = motor.calculateDistanceB();
     }
     motor.stopMotorA();
     motor.stopMotorB();
+    motor.resetCount();
 }
 
 /*
 Main Setup
 */
 void setup() {
-    Serial.begin(9600);
+    delay(1000);
+    // Serial.begin(9600);
+    Serial.begin(115200);
+    bluetoothSetup();
+
     motor.setup();
     Serial.println("Started BLE Robot");
     motor.startCounting();
+    bluetoothThread.start(bluetoothTest);
 }
 
 /*
@@ -245,6 +282,21 @@ Main Loop
 */
 void loop() {
     quarterTurnLeft();
+    delay(1000);
+    quarterTurnLeft();
+    delay(1000);
+    quarterTurnLeft();
+    delay(1000);
+    quarterTurnLeft();
+    delay(1000);
+    quarterTurnRight();
+    delay(1000);
+    quarterTurnRight();
+    delay(1000);
+    quarterTurnRight();
+    delay(1000);
+    quarterTurnRight();
+    delay(1000);
     delay(10000);
     Serial.println("loop end");
 }

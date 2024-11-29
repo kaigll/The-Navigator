@@ -44,6 +44,8 @@ public:
     void stopMotorB();
 
     void startCounting();
+    
+    void resetCount();
 
     void countPulseA();
 

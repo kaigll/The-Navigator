@@ -39,6 +39,11 @@ void Motor::startCounting() {
     encoderB.rise(mbed::callback(this, &Motor::countPulseB));
 }
 
+void Motor::resetCount() {
+    encoderCountA = 0;
+    encoderCountB = 0;
+}
+
 void Motor::countPulseA() {
     if (motorADir == 0)
         encoderCountA++;
