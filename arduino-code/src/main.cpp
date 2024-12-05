@@ -6,8 +6,8 @@
 #include <HCSR04.h>
 #include <Motor.h>
 
-UltraSonicDistanceSensor us1(7); // D7 on graph
-UltraSonicDistanceSensor us2(6); // D6 on graph
+UltraSonicDistanceSensor us1(7); // D7 on graph -> left
+UltraSonicDistanceSensor us2(6); // D6 on graph -> right
 GPY0E02B irBus;
 
 // Motor motor(P0_27, P1_2, P0_4, P0_5);
@@ -24,6 +24,7 @@ BLEService firmwareService(FIRMWARE_SERVICE_UUID);
 BLECharacteristic firmwareCharacteristic(FIRMWARE_CHARACTERISTIC_UUID, BLEWrite, 512);
 
 rtos::Thread bluetoothThread;
+rtos::Thread motorSyncThread;
 
 void bluetoothSetup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -262,19 +263,48 @@ void quarterTurnLeft() {
     motor.resetCount();
 }
 
+void moveForwardToWall() {
+    float speed = 0.5f;
+    motor.updateMotors(0, 1, speed, speed);
+    bool wallFound = false;
+    irBus.selectBus(0);
+    while (!wallFound) {
+        if (irBus.measureDistanceCm() <= 5) {
+            wallFound = true;
+            break;
+        } else {
+            delay(50);
+        }
+    }
+    motor.stopMotors();
+    if (us1.measureDistanceCm() > 6.0f && us2.measureDistanceCm() < 6.0f) {
+        quarterTurnLeft();
+    }
+    else  if (us1.measureDistanceCm() > 6.0f && us2.measureDistanceCm() <= 6.0f) {
+        quarterTurnLeft();
+    } else  if (us1.measureDistanceCm() <= 6.0f && us2.measureDistanceCm() > 6.0f) {
+        quarterTurnRight();
+    } else {
+        quarterTurnRight();
+        quarterTurnRight();
+    }
+    moveForwardToWall();
+}
+
 /*
 Main Setup
 */
 void setup() {
     delay(1000);
-    // Serial.begin(9600);
-    Serial.begin(115200);
-    bluetoothSetup();
-
+    Serial.begin(9600); // uncomment when not using bluetooth
+    //Serial.begin(115200); // uncomment when using bluetooth
+    //bluetoothSetup();
+    //bluetoothThread.start(bluetoothTest);
     motor.setup();
-    Serial.println("Started BLE Robot");
     motor.startCounting();
-    bluetoothThread.start(bluetoothTest);
+    motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
+
+    Serial.println("Started Robot");
 }
 
 /*
@@ -282,21 +312,11 @@ Main Loop
 */
 void loop() {
     quarterTurnLeft();
-    delay(1000);
-    quarterTurnLeft();
-    delay(1000);
-    quarterTurnLeft();
-    delay(1000);
-    quarterTurnLeft();
-    delay(1000);
     quarterTurnRight();
     delay(1000);
-    quarterTurnRight();
+    moveForwardToWall();
+    readUltrasonicSensor(us1);
+    readUltrasonicSensor(us2);
     delay(1000);
-    quarterTurnRight();
-    delay(1000);
-    quarterTurnRight();
-    delay(1000);
-    delay(10000);
     Serial.println("loop end");
 }

@@ -24,14 +24,41 @@ void Motor::updateMotors(int directionA, int directionB, float speedA,
     mutex.lock();
     motorADir = directionA;
     motorBDir = directionB;
+    motorASpeed = speedA;
+    motorBSpeed = speedB;
     motorAPWM.write(speedA);
     motorBPWM.write(speedB);
     mutex.unlock();
 }
 
+void Motor::updateMotors(float speedA, float speedB) {
+    mutex.lock();
+    motorAPWM.write(speedA);
+    motorBPWM.write(speedB);
+    mutex.unlock();
+}
+
+void Motor::syncMotors() {
+    int diff = abs(encoderA - encoderB);
+
+    if (abs(encoderA) < abs(encoderB)) {
+        updateMotors(motorBSpeed, 0);
+    } else if (abs(encoderA) > abs(encoderB)) {
+        updateMotors(0, motorBSpeed);
+    } else {
+        updateMotors(motorASpeed, motorBSpeed);
+    }
+    Serial.println("syncing....");
+}
+
 void Motor::stopMotorA() { motorAPWM.write(0.0f); }
 
 void Motor::stopMotorB() { motorBPWM.write(0.0f); }
+
+void Motor::stopMotors() {
+    motorAPWM.write(0.0f);
+    motorBPWM.write(0.0f);
+}
 
 void Motor::startCounting() {
     timer.start();

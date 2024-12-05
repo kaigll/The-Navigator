@@ -34,6 +34,16 @@ public:
                       float speedB);
 
     /**
+     * @brief Update the direction and speed of both motors simultaneously
+     *
+     * @param speedA Speed for motor A (0.0f to 1.0f)
+     * @param speedB Speed for motor B (0.0f to 1.0f)
+     */
+    void updateMotors(float speedA, float speedB);
+
+    void syncMotors();
+
+    /**
      * @brief Stop motor A by setting its speed to 0
      */
     void stopMotorA();
@@ -43,8 +53,13 @@ public:
      */
     void stopMotorB();
 
+    /**
+     * @brief Stop motor B by setting its speed to 0
+     */
+    void stopMotors();
+
     void startCounting();
-    
+
     void resetCount();
 
     void countPulseA();
@@ -65,8 +80,9 @@ private:
     mbed::PwmOut motorAPWM;     // PWM pin for motor A speed control
     mbed::PwmOut motorBPWM;     // PWM pin for motor B speed control
     rtos::Mutex mutex;          // Single mutex to ensure atomic updates
+    float motorASpeed;
+    float motorBSpeed;
 
-    
     long int shaftRevA;
     long int shaftRevB;
     long int encoderCountA;
@@ -75,8 +91,8 @@ private:
     volatile int lastEncoderCountB = 0;
 
     const float wheelDiameter = 4.7;
-    const float wheelCircumference = wheelDiameter * PI; //14.7654854719; // wheelDiameter * pi
-    const int pulsesPerRevolution = 330; 
+    const float wheelCircumference = wheelDiameter * PI; //~14.7654854719;
+    const int pulsesPerRevolution = 330;
 
     mbed::Timer timer;
 };
