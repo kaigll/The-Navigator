@@ -211,20 +211,48 @@ void moveBackward(float s) {
     motor.updateMotors(0, 1, s, s);
 }
 
-void rotateRight(float s) {
-    motor.updateMotors(0, 0, s, s);
-    // thread_sleep_for(1000); // Adjust the timing for a 90-degree rotation based on your setup
-    delay(1000);
+void rotateRight(float angle) {
+    Serial.print("Attempting to turn ");
+    Serial.print(angle);
+    Serial.println(" degrees...");
+
+    float quarterCircumference = (angle / 360) * 13.8 * PI;
+    motor.resetCount();
+    motor.updateMotors(0, 0, 0.5f, 0.5f);
+    while (true) {
+        float distA = motor.calculateDistanceA();
+        float distB = motor.calculateDistanceB();
+
+        if (abs(distA) >= quarterCircumference || abs(distB) >= quarterCircumference) {
+            break;
+        }
+        delay(10);
+    }
     motor.stopMotorA();
     motor.stopMotorB();
+    motor.resetCount();
 }
 
-void rotateLeft(float s) {
-    motor.updateMotors(1, 1, s, s);
-    // thread_sleep_for(1000); // Adjust the timing for a 90-degree rotation based on your setup
-    delay(1000);
+void rotateLeft(float angle) {
+    Serial.print("Attempting to turn ");
+    Serial.print(angle);
+    Serial.println(" degrees...");
+
+    float quarterCircumference = (angle / 360) * 13.8 * PI;
+    motor.resetCount();
+    motor.updateMotors(1, 1, 0.5f, 0.5f);
+    while (true) {
+        float distA = motor.calculateDistanceA();
+        float distB = motor.calculateDistanceB();
+
+        if (abs(distA) >= quarterCircumference || abs(distB) >= quarterCircumference) {
+            break;
+        }
+        delay(10);
+    }
     motor.stopMotorA();
     motor.stopMotorB();
+    motor.resetCount();
 }
 
 // turn 90 degrees left (clockwise)
@@ -279,10 +307,9 @@ void moveForwardToWall() {
     motor.stopMotors();
     if (us1.measureDistanceCm() > 6.0f && us2.measureDistanceCm() < 6.0f) {
         quarterTurnLeft();
-    }
-    else  if (us1.measureDistanceCm() > 6.0f && us2.measureDistanceCm() <= 6.0f) {
+    } else if (us1.measureDistanceCm() > 6.0f && us2.measureDistanceCm() <= 6.0f) {
         quarterTurnLeft();
-    } else  if (us1.measureDistanceCm() <= 6.0f && us2.measureDistanceCm() > 6.0f) {
+    } else if (us1.measureDistanceCm() <= 6.0f && us2.measureDistanceCm() > 6.0f) {
         quarterTurnRight();
     } else {
         quarterTurnRight();
@@ -291,15 +318,37 @@ void moveForwardToWall() {
     moveForwardToWall();
 }
 
+float calculateStraightPathCorrectionAngle() {
+    float d1L = us1.measureDistanceCm();
+    float d1R = us2.measureDistanceCm();
+    if (d1L > 15 && d1R > 15) {
+        Serial.println("failed to detect wall");
+        return 0.0f;
+    }
+    motor.resetCount();
+    delay(100);
+    float d2L = us1.measureDistanceCm();
+    float d2R = us2.measureDistanceCm();
+    float dmA = motor.calculateDistanceA();
+    float dmB = motor.calculateDistanceB();
+
+    float thetaL = 180 / PI * atan((d2L - d1L) / dmA);
+    float thetaR = 180 / PI * atan((d2L - d1L) / dmA);
+    if (abs(thetaL) >= abs(thetaR))
+        return thetaL;
+    else
+        return -thetaR;
+}
+
 /*
 Main Setup
 */
 void setup() {
     delay(1000);
     Serial.begin(9600); // uncomment when not using bluetooth
-    //Serial.begin(115200); // uncomment when using bluetooth
-    //bluetoothSetup();
-    //bluetoothThread.start(bluetoothTest);
+    // Serial.begin(115200); // uncomment when using bluetooth
+    // bluetoothSetup();
+    // bluetoothThread.start(bluetoothTest);
     motor.setup();
     motor.startCounting();
     motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
@@ -311,12 +360,13 @@ void setup() {
 Main Loop
 */
 void loop() {
-    quarterTurnLeft();
-    quarterTurnRight();
-    delay(1000);
-    moveForwardToWall();
-    readUltrasonicSensor(us1);
-    readUltrasonicSensor(us2);
+    moveForward(0.4f);
+    float f = calculateStraightPathCorrectionAngle();
+    if (f < 0) {
+        rotateRight(f);
+    } else if (f > 0) {
+        rotateLeft(f);
+    }
     delay(1000);
     Serial.println("loop end");
 }
