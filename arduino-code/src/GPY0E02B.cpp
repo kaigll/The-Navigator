@@ -24,10 +24,8 @@ float GPY0E02B::measureDistanceCm() {
     wait_us(500); // Provided delay
     i2c.read(sensorAddress, data, 2);
 
-    // int distance = (data[0] << 8) | data[1];
-    float distance = (((data[0] << 4) +  data[1])/16)/4;
+    uint16_t combinedData = (data[0] << 4) | data[1];
+    float distance = static_cast<float>(combinedData) / 64.0;
 
-    // Distance[11:4]*16+Distance[3:0]/16/2^n
-    // n: shift bit (Register 0x35)
     return distance;
 }
