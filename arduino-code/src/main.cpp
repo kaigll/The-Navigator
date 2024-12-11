@@ -20,7 +20,6 @@ GPY0E02B irBus;
 // Motor A is the Left
 // Motor B is the Right
 Motor motor(P0_4, P0_5, P0_27, P1_2);
-float speed = 0;
 
 #define FIRMWARE_SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
 #define FIRMWARE_CHARACTERISTIC_UUID "abcdefab-cdef-abcd-efab-cdefabcdefab"
@@ -168,6 +167,7 @@ void readUltrasonicSensor(UltraSonicDistanceSensor us) {
     }
 }
 
+float kb_speed = 0;
 void keyboardControls() {
     char input;
 
@@ -178,46 +178,46 @@ void keyboardControls() {
 
     switch (input) {
     case 'w':
-        motor.updateMotors(1, 0, speed, speed);
+        motor.updateMotors(1, 0, kb_speed, kb_speed);
         break;
     case 'a':
-        motor.updateMotors(1, 1, speed, speed);
+        motor.updateMotors(1, 1, kb_speed, kb_speed);
         break;
     case 's':
-        motor.updateMotors(0, 1, speed, speed);
+        motor.updateMotors(0, 1, kb_speed, kb_speed);
         break;
     case 'd':
-        motor.updateMotors(0, 0, speed, speed);
+        motor.updateMotors(0, 0, kb_speed, kb_speed);
         break;
     case '1':
-        speed = 0.1f;
+        kb_speed = 0.1f;
         break;
     case '2':
-        speed = 0.2f;
+        kb_speed = 0.2f;
         break;
     case '3':
-        speed = 0.3f;
+        kb_speed = 0.3f;
         break;
     case '4':
-        speed = 0.4f;
+        kb_speed = 0.4f;
         break;
     case '5':
-        speed = 0.5f;
+        kb_speed = 0.5f;
         break;
     case '6':
-        speed = 0.6f;
+        kb_speed = 0.6f;
         break;
     case '7':
-        speed = 0.7f;
+        kb_speed = 0.7f;
         break;
     case '8':
-        speed = 0.8f;
+        kb_speed = 0.8f;
         break;
     case '9':
-        speed = 0.9f;
+        kb_speed = 0.9f;
         break;
     case '0':
-        speed = 1.0f;
+        kb_speed = 1.0f;
         break;
     default:
         break;
@@ -229,10 +229,10 @@ void moveForward(float s) {
 }
 
 void moveBackward(float s) {
-    motor.updateMotors(0, 1, s, s);
+    motor.updateMotors(1, 0, s, s);
 }
 
-void turnRight(float angle) {
+void turnRight(float angle, float speed) {
     Serial.print("Attempting to turn ");
     Serial.print(angle);
     Serial.println(" degrees...");
@@ -254,14 +254,14 @@ void turnRight(float angle) {
     motor.resetCount();
 }
 
-void turnLeft(float angle) {
+void turnLeft(float angle, float speed) {
     Serial.print("Attempting to turn ");
     Serial.print(angle);
     Serial.println(" degrees...");
 
     float quarterCircumference = (angle / 360) * 13.8 * PI;
     motor.resetCount();
-    motor.updateMotors(1, 1, 0.5f, 0.5f);
+    motor.updateMotors(1, 1, speed, speed);
     while (true) {
         float distA = motor.calculateDistanceA();
         float distB = motor.calculateDistanceB();
@@ -300,13 +300,13 @@ void moveForwardToWall() {
     float dRB = irBus.measureDistanceCm();
 
     if (dLF > 10.0f && dRF < 10.0f) {
-        turnLeft(90);
+        turnLeft(90, 0.4f);
     } else if (dLF > 10.0f && dRF <= 10.0f) {
-        turnLeft(90);
+        turnLeft(90, 0.4f);
     } else if (dLF <= 10.0f && dRF > 10.0f) {
-        turnRight(90);
+        turnRight(90, 0.4f);
     } else {
-        turnRight(90);
+        turnRight(90, 0.4f);
     }
     moveForwardToWall();
 }
@@ -327,9 +327,11 @@ float calculateStraightPathCorrectionAngle() {
     }
     if (dLF < 15 && dLB < 15) {
         return -180 / PI * atan((dLB - dLF) / 9.6f);
-    } else if (dRF < 15 && dRB < 15) {
+    } 
+    if (dRF < 15 && dRB < 15) {
         return 180 / PI * atan((dRB - dRF) / 9.6f);
     }
+    return 0.0f;
 }
 
 void straightenPath() {
@@ -338,10 +340,10 @@ void straightenPath() {
         Serial.println(angle);
         motor.stopMotors();
         delay(100);
-        if (angle > 3.0f) {
-            turnLeft(angle);
-        } else if (angle < -3.0f) {
-            turnRight(-angle);
+        if (angle > 0) {
+            turnLeft(angle, 0.3f);
+        } else if (angle < 0) {
+            turnRight(-angle, 0.3f);
         }
         angle = calculateStraightPathCorrectionAngle();
     }
@@ -375,15 +377,15 @@ void movementStateMachine() {
         }
         break;
     case TURN_LEFT:
-        turnLeft(90);
+        turnLeft(90, 0.4f);
         currentState = MOVE_FORWARD;
         break;
     case TURN_RIGHT:
-        turnRight(90);
+        turnRight(90, 0.4f);
         currentState = MOVE_FORWARD;
         break;
     case U_TURN:
-        turnLeft(180);
+        turnLeft(180, 0.5f);
         currentState = MOVE_FORWARD;
         break;
     default:
@@ -405,7 +407,7 @@ void setup() {
     motor.setup();
     motor.startCounting();
     motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
-    //movementThread.start(movementStateMachine);
+    // movementThread.start(movementStateMachine);
 
     Serial.println("Started Robot");
 }
