@@ -276,16 +276,139 @@ void turnLeft(float angle, float speed) {
     motor.resetCount();
 }
 
+void straighten() {
+    irBus.selectBus(0);
+    float dLF = irBus.measureDistanceCm();
+    irBus.selectBus(1);
+    float dLB = irBus.measureDistanceCm();
+    irBus.selectBus(2);
+    float dRF = irBus.measureDistanceCm();
+    irBus.selectBus(3);
+    float dRB = irBus.measureDistanceCm();
+
+    // if no walls within limits
+    float wallLimit = 15.0f;
+    float errorLimit = 0.1f;
+    if (dLF > wallLimit && dLB > wallLimit && dRF > wallLimit && dRB > wallLimit) {
+        Serial.println("failed to detect wall");
+        return;
+    }
+
+    if ((dLF + dLB) < (dRF + dRB)) {
+        if (fabs(dLF - dLB) < errorLimit) {
+            return;
+        }
+
+        if (dLF < dLB) {
+            Serial.println("Aligning right to follow the left wall");
+            float speed = 0.0f;
+            while (dLF < dLB) {
+                motor.updateMotors(0, 0, speed, speed); // turn right
+                speed += 0.01f;
+
+                irBus.selectBus(0);
+                dLF = irBus.measureDistanceCm();
+                irBus.selectBus(1);
+                dLB = irBus.measureDistanceCm();
+
+                if (fabs(dLF - dLB) < errorLimit) {
+                    break;
+                }
+                delay(50);
+            }
+            motor.stopMotors();
+            delay(10);
+        } else if (dLF > dLB) {
+            Serial.println("Aligning left to follow the left wall");
+            float speed = 0.0f;
+            while (dLF > dLB) {
+                motor.updateMotors(1, 1, speed, speed); // turn left
+                speed += 0.01f;
+
+                irBus.selectBus(0);
+                dLF = irBus.measureDistanceCm();
+                irBus.selectBus(1);
+                dLB = irBus.measureDistanceCm();
+                if (fabs(dLF - dLB) < 0.5) {
+                    break;
+                }
+                delay(50);
+            }
+            motor.stopMotors();
+            delay(10);
+        }
+    } else if ((dLF + dLB) > (dRF + dRB)) {
+        if (fabs(dRF - dRB) < errorLimit) {
+            return;
+        }
+        if (dRF < dRB) {
+            Serial.println("Aligning left to follow the right wall");
+            float speed = 0.0f;
+            while (dRF < dRB) {
+                motor.updateMotors(1, 1, speed, speed); // turn left
+                speed += 0.01f;
+
+                irBus.selectBus(2);
+                dRF = irBus.measureDistanceCm();
+                irBus.selectBus(3);
+                dRB = irBus.measureDistanceCm();
+                if (fabs(dRF - dRB) < 0.5) {
+                    break;
+                }
+                delay(50);
+            }
+            motor.stopMotors();
+            delay(10);
+        } else if (dRF > dRB) {
+            Serial.println("Aligning right to follow the right wall");
+            float speed = 0.0f;
+            while (dRF > dRB) {
+                motor.updateMotors(0, 0, speed, speed); // turn right
+                speed += 0.01f;
+
+                irBus.selectBus(2);
+                dRF = irBus.measureDistanceCm();
+                irBus.selectBus(3);
+                dRB = irBus.measureDistanceCm();
+                if (fabs(dRF - dRB) < 0.5) {
+                    break;
+                }
+                delay(50);
+            }
+            motor.stopMotors();
+            delay(10);
+        }
+    }
+}
+
 void moveForwardToWall() {
+    straighten();
+    straighten();
     float speed = 0.5f;
     motor.updateMotors(0, 1, speed, speed);
     bool wallFound = false;
+    motor.resetCount();
+    float lastDistA = motor.calculateDistanceA();
+    float lastDistB = motor.calculateDistanceB();
+    float lastDistance = us1.measureDistanceCm();
+
     while (!wallFound) {
-        if (us1.measureDistanceCm() <= 5) {
+        if (lastDistance <= 5) {
             wallFound = true;
             break;
         } else {
             delay(50);
+        }
+        if (abs(us1.measureDistanceCm() - lastDistance) < 0.1 
+            || abs(motor.calculateDistanceA() - lastDistA) < 0.001 
+            || abs(motor.calculateDistanceB() - lastDistB) < 0.001) {
+                motor.updateMotors(1, 0, speed, speed);
+                delay(300);
+                return;
+        } else {
+            lastDistA = motor.calculateDistanceA();
+            lastDistB = motor.calculateDistanceB();
+            lastDistance = us1.measureDistanceCm();
         }
     }
     motor.stopMotors();
@@ -311,45 +434,6 @@ void moveForwardToWall() {
     moveForwardToWall();
 }
 
-float calculateStraightPathCorrectionAngle() {
-    irBus.selectBus(0);
-    float dLF = irBus.measureDistanceCm();
-    irBus.selectBus(1);
-    float dLB = irBus.measureDistanceCm();
-    irBus.selectBus(2);
-    float dRF = irBus.measureDistanceCm();
-    irBus.selectBus(3);
-    float dRB = irBus.measureDistanceCm();
-
-    if (dLF > 15 && dLB > 15 && dRF > 15 && dRB > 15) {
-        Serial.println("failed to detect wall");
-        return 0.0f;
-    }
-    if (dLF < 15 && dLB < 15) {
-        return -180 / PI * atan((dLB - dLF) / 9.6f);
-    } 
-    if (dRF < 15 && dRB < 15) {
-        return 180 / PI * atan((dRB - dRF) / 9.6f);
-    }
-    return 0.0f;
-}
-
-void straightenPath() {
-    float angle = calculateStraightPathCorrectionAngle();
-    while (abs(angle) > 3.0f) {
-        Serial.println(angle);
-        motor.stopMotors();
-        delay(100);
-        if (angle > 0) {
-            turnLeft(angle, 0.3f);
-        } else if (angle < 0) {
-            turnRight(-angle, 0.3f);
-        }
-        angle = calculateStraightPathCorrectionAngle();
-    }
-    moveForward(0.5f);
-}
-
 void movementStateMachine() {
     irBus.selectBus(0);
     float dLF = irBus.measureDistanceCm();
@@ -373,7 +457,7 @@ void movementStateMachine() {
             }
         } else {
             moveForward(0.5f);
-            straightenPath();
+            ;
         }
         break;
     case TURN_LEFT:
@@ -416,8 +500,17 @@ void setup() {
 Main Loop
 */
 void loop() {
+    /*straighten();
+    delay(100);
+    straighten();
+    delay(100);
     moveForward(0.5f);
-    straightenPath();
+    while (us1.measureDistanceCm() > 10)
+        delay(100);
+    motor.stopMotors();
+    turnLeft(90, 0.25);*/
+    moveForwardToWall();
+
     delay(10);
     Serial.println("loop end");
 }
