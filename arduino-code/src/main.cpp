@@ -6,6 +6,9 @@
 #include <HCSR04.h>
 #include <Motor.h>
 
+#include <Coordinate.h>
+#include <Map.h>
+
 // US 1 Front
 UltraSonicDistanceSensor us1(7);
 // US 2 Back
@@ -45,6 +48,10 @@ enum State {
 };
 
 State currentState = MOVE_FORWARD;
+
+Coordinate coords(1, 1, 0);
+
+Map mapInstance(29, 40, 5); // maze is roughly 145cm x 200cm
 
 void bluetoothSetup() {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -249,6 +256,7 @@ void turnRight(float angle, float speed) {
         }
         delay(10);
     }
+    coords.turnRight(angle);
     motor.stopMotorA();
     motor.stopMotorB();
     motor.resetCount();
@@ -271,6 +279,7 @@ void turnLeft(float angle, float speed) {
         }
         delay(10);
     }
+    coords.turnLeft(angle);
     motor.stopMotorA();
     motor.stopMotorB();
     motor.resetCount();
@@ -381,6 +390,9 @@ void straighten() {
     }
 }
 
+void localiseWalls() {
+}
+
 void moveForwardToWall() {
     straighten();
     straighten();
@@ -399,12 +411,10 @@ void moveForwardToWall() {
         } else {
             delay(50);
         }
-        if (abs(us1.measureDistanceCm() - lastDistance) < 0.1 
-            || abs(motor.calculateDistanceA() - lastDistA) < 0.001 
-            || abs(motor.calculateDistanceB() - lastDistB) < 0.001) {
-                motor.updateMotors(1, 0, speed, speed);
-                delay(300);
-                return;
+        if (abs(us1.measureDistanceCm() - lastDistance) < 0.1 || abs(motor.calculateDistanceA() - lastDistA) < 0.001 || abs(motor.calculateDistanceB() - lastDistB) < 0.001) {
+            motor.updateMotors(1, 0, speed, speed);
+            delay(300);
+            return;
         } else {
             lastDistA = motor.calculateDistanceA();
             lastDistB = motor.calculateDistanceB();
@@ -493,6 +503,8 @@ void setup() {
     motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
     // movementThread.start(movementStateMachine);
 
+    mapInstance.initializeGrid();
+
     Serial.println("Started Robot");
 }
 
@@ -500,17 +512,22 @@ void setup() {
 Main Loop
 */
 void loop() {
-    /*straighten();
-    delay(100);
-    straighten();
-    delay(100);
-    moveForward(0.5f);
-    while (us1.measureDistanceCm() > 10)
-        delay(100);
-    motor.stopMotors();
-    turnLeft(90, 0.25);*/
-    moveForwardToWall();
 
-    delay(10);
+    turnLeft(10, 0.3f);
+
+    irBus.selectBus(0);
+    float dLF = irBus.measureDistanceCm();
+    irBus.selectBus(1);
+    float dLB = irBus.measureDistanceCm();
+    irBus.selectBus(2);
+    float dRF = irBus.measureDistanceCm();
+    irBus.selectBus(3);
+    float dRB = irBus.measureDistanceCm();
+    float dFront = us1.measureDistanceCm();
+    float dBack = us2.measureDistanceCm();
+
+    mapInstance.updateGrid(coords, dLF, dLB, dRF, dRB, dFront, dBack);
+    mapInstance.printGrid();
+    delay(10000);
     Serial.println("loop end");
 }
