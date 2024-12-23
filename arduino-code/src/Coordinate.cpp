@@ -27,6 +27,12 @@ void Coordinate::turnRight(float angle) {
     orientation = fmod((orientation + angle), 360.0f);
 }
 
+void Coordinate::moveForward(float distance) {
+    float rad = fmod(orientation, 360.0f) * (M_PI / 180.0);
+    x += static_cast<int>(distance * cos(rad));
+    y += static_cast<int>(distance * sin(rad));
+}
+
 int Coordinate::getX() {
     return x;
 }

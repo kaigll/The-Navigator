@@ -2,9 +2,9 @@
 #include <Arduino.h>
 
 Map::Map(int width, int height, int cellSize) : width(width), height(height), cellSize(cellSize) {
-    grid = new int *[width];
+    grid = new uint8_t *[width];
     for (int i = 0; i < width; ++i) {
-        grid[i] = new int[height];
+        grid[i] = new uint8_t[height];
     }
     initializeGrid();
 }
@@ -17,66 +17,93 @@ void Map::initializeGrid() {
     }
 }
 
-void Map::updateGrid(Coordinate coords, float dLF, float dLB, float dRF, float dRB, float dFront, float dBack) {
-    int cellX, cellY;
+std::pair<int, int> Map::calculateGlobalPosition(float offsetX, float offsetY, float distance, float sensorOrientation) {
+    float rad = fmod((robotOrientation + sensorOrientation), 360.0f) * (PI / 180.0); // Convert orientation to radians
+    int globalX = robotX + static_cast<int>((offsetX + distance * -sin(rad)) / cellSize);
+    int globalY = robotY + static_cast<int>((offsetY + distance * cos(rad)) / cellSize);
+    Serial.print(globalX);
+    Serial.print(" ,");
+    Serial.println(globalY);
 
-    auto calculateGlobalPosition = [this, &coords](float offsetX, float offsetY, float distance, float sensorOrientation) {
-        float rad = fmod((coords.getOrientation() + sensorOrientation), 360.0f) * (PI / 180.0); // Convert orientation to radians
-        int globalX = coords.getX() + static_cast<int>((offsetX + distance * -sin(rad)) / cellSize);
-        int globalY = coords.getY() + static_cast<int>((offsetY + distance * cos(rad)) / cellSize);
-        Serial.print(globalX);
-        Serial.print(" ,");
-        Serial.println(globalY);
+    return std::make_pair(globalX, globalY);
+}
 
-        
-        // reference of center for coordinates
-        return std::make_pair(globalX, globalY);
-    };
+void Map::markPath(int startX, int startY, int endX, int endY) {
+    int x = startX;
+    int y = startY;
+    int dx = abs(endX - startX);
+    int dy = abs(endY - startY);
+    int sx = (startX < endX) ? 1 : -1;
+    int sy = (startY < endY) ? 1 : -1;
+    int err = dx - dy;
 
-    // Update grid based on left front sensor
-    std::tie(cellX, cellY) = calculateGlobalPosition(sensorLF_X/cellSize, sensorLF_Y/cellSize, dLF, 270);
-    if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
-        grid[cellX][cellY] = OBSTACLE;
+    while (true) {
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+            grid[x][y] = FREE_SPACE;
+        }
+        if (x == endX && y == endY)
+            break;
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
     }
+}
 
-    // Update grid based on left back sensor
-    std::tie(cellX, cellY) = calculateGlobalPosition(sensorLB_X/cellSize, sensorLB_Y/cellSize, dLB, 270);
+void Map::updateGridWithSensor(float sensorX, float sensorY, float distance, float sensorOrientation) {
+    std::pair<int, int> globalPosition = calculateGlobalPosition(sensorX / cellSize, sensorY / cellSize, distance, sensorOrientation);
+    int cellX = globalPosition.first;
+    int cellY = globalPosition.second;
     if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
-        grid[cellX][cellY] = OBSTACLE;
+        markPath(robotX, robotY, cellX, cellY); // Mark path to the obstacle
+        grid[cellX][cellY] = OBSTACLE;                        // Mark the obstacle itself
     }
+}
 
-    // Update grid based on right front sensor
-    std::tie(cellX, cellY) = calculateGlobalPosition(sensorRF_X/cellSize, sensorRF_Y/cellSize, dRF, 90);
-    if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
-        grid[cellX][cellY] = OBSTACLE;
-    }
+void Map::updateGrid(float dLF, float dLB, float dRF, float dRB, float dFront, float dBack) {
+    updateGridWithSensor(sensorLF_X, sensorLF_Y, dLF, 270);
+    updateGridWithSensor(sensorLB_X, sensorLB_Y, dLB, 270);
+    updateGridWithSensor(sensorRF_X, sensorRF_Y, dRF, 90);
+    updateGridWithSensor(sensorRB_X, sensorRB_Y, dRB, 90);
+    updateGridWithSensor(sensorFront_X, sensorFront_Y, dFront, 0);
+    updateGridWithSensor(sensorBack_X, sensorBack_Y, dBack, 180);
 
-    // Update grid based on right back sensor
-    std::tie(cellX, cellY) = calculateGlobalPosition(sensorRB_X/cellSize, sensorRB_Y/cellSize, dRB, 90);
-    if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
-        grid[cellX][cellY] = OBSTACLE;
-    }
+    grid[robotX][robotY] = ROBOT_LOCATION; // Mark the robot's current location
+}
 
-    // Update grid based on front sensor
-    std::tie(cellX, cellY) = calculateGlobalPosition(sensorFront_X/cellSize, sensorFront_Y/cellSize, dFront, 0);
-    if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
-        grid[cellX][cellY] = OBSTACLE;
-    }
+void Map::setRobotPosition(uint8_t x, uint8_t y) {
+    robotX = x;
+    robotY = y;
+}
 
-    // Update grid based on back sensor
-    std::tie(cellX, cellY) = calculateGlobalPosition(sensorBack_X/cellSize, sensorBack_Y/cellSize, dBack, 180);
-    if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
-        grid[cellX][cellY] = OBSTACLE;
-    }
+void Map::turnRobotLeft(float angle) {
+    robotOrientation = fmod((robotOrientation - angle + 360.0f), 360.0f);
+}
 
-    grid[coords.getX()][coords.getY()] = ROBOT_LOCATION;
+void Map::turnRobotRight(float angle) {
+    robotOrientation = fmod((robotOrientation + angle), 360.0f);
+}
+
+void Map::moveRobotForward(uint8_t distance) {
+    float rad = fmod(robotOrientation, 360.0f) * (M_PI / 180.0);
+    robotX += static_cast<int>(distance * cos(rad));
+    robotY += static_cast<int>(distance * sin(rad));
 }
 
 // Optional: For debugging purposes
 void Map::printGrid() {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            Serial.print(grid[x][y]);
+            if (grid[x][y] == 0) {
+                Serial.print(".");
+            } else {
+                Serial.print(grid[x][y]);
+            }
             Serial.print(" ");
         }
         Serial.println();

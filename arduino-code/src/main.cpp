@@ -49,8 +49,6 @@ enum State {
 
 State currentState = MOVE_FORWARD;
 
-Coordinate coords(1, 1, 0);
-
 Map mapInstance(29, 40, 5); // maze is roughly 145cm x 200cm
 
 void bluetoothSetup() {
@@ -174,69 +172,52 @@ void readUltrasonicSensor(UltraSonicDistanceSensor us) {
     }
 }
 
-float kb_speed = 0;
-void keyboardControls() {
-    char input;
+void moveForward(float distance, float speed) {
+    Serial.print("Attempting to move forwards ");
+    Serial.print(distance);
+    Serial.println(" cm...");
 
-    if (Serial.available()) {
-        input = Serial.read();
-        Serial.println(input, HEX);
+    motor.resetCount();
+    motor.updateMotors(0, 1, speed, speed);
+
+    while (true) {
+        float distA = motor.calculateDistanceA();
+        float distB = motor.calculateDistanceB();
+
+        if (abs(distA) >= distance || abs(distB) >= distance) {
+            break;
+        }
+        
+        delay(10);
     }
 
-    switch (input) {
-    case 'w':
-        motor.updateMotors(1, 0, kb_speed, kb_speed);
-        break;
-    case 'a':
-        motor.updateMotors(1, 1, kb_speed, kb_speed);
-        break;
-    case 's':
-        motor.updateMotors(0, 1, kb_speed, kb_speed);
-        break;
-    case 'd':
-        motor.updateMotors(0, 0, kb_speed, kb_speed);
-        break;
-    case '1':
-        kb_speed = 0.1f;
-        break;
-    case '2':
-        kb_speed = 0.2f;
-        break;
-    case '3':
-        kb_speed = 0.3f;
-        break;
-    case '4':
-        kb_speed = 0.4f;
-        break;
-    case '5':
-        kb_speed = 0.5f;
-        break;
-    case '6':
-        kb_speed = 0.6f;
-        break;
-    case '7':
-        kb_speed = 0.7f;
-        break;
-    case '8':
-        kb_speed = 0.8f;
-        break;
-    case '9':
-        kb_speed = 0.9f;
-        break;
-    case '0':
-        kb_speed = 1.0f;
-        break;
-    default:
-        break;
+    mapInstance.moveRobotForward(distance);
+    motor.stopMotorA();
+    motor.stopMotorB();
+    motor.resetCount();
+}
+
+void moveBackward(float distance, float speed) {
+    Serial.print("Attempting to move backwards ");
+    Serial.print(distance);
+    Serial.println(" cm...");
+
+    motor.resetCount();
+    motor.updateMotors(1, 0, speed, speed);
+
+    while (true) {
+        float distA = motor.calculateDistanceA();
+        float distB = motor.calculateDistanceB();
+
+        if (abs(distA) >= distance || abs(distB) >= distance) {
+            break;
+        }
+        delay(10);
     }
-}
-
-void moveForward(float s) {
-    motor.updateMotors(0, 1, s, s);
-}
-
-void moveBackward(float s) {
-    motor.updateMotors(1, 0, s, s);
+    // ISSUE NO MAPPING
+    motor.stopMotorA();
+    motor.stopMotorB();
+    motor.resetCount();
 }
 
 void turnRight(float angle, float speed) {
@@ -256,7 +237,7 @@ void turnRight(float angle, float speed) {
         }
         delay(10);
     }
-    coords.turnRight(angle);
+    mapInstance.turnRobotRight(angle);
     motor.stopMotorA();
     motor.stopMotorB();
     motor.resetCount();
@@ -279,10 +260,46 @@ void turnLeft(float angle, float speed) {
         }
         delay(10);
     }
-    coords.turnLeft(angle);
+    mapInstance.turnRobotLeft(angle);
     motor.stopMotorA();
     motor.stopMotorB();
     motor.resetCount();
+}
+
+void alignRight(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
+    float speed = 0.0f;
+    while (frontDistance < backDistance) {
+        motor.updateMotors(0, 0, speed, speed); // turn right
+        speed += 0.01f;
+        irBus.selectBus(frontBus);
+        frontDistance = irBus.measureDistanceCm();
+        irBus.selectBus(backBus);
+        backDistance = irBus.measureDistanceCm();
+        if (fabs(frontDistance - backDistance) < errorLimit) {
+            break;
+        }
+        delay(50);
+    }
+    motor.stopMotors();
+    delay(10);
+}
+
+void alignLeft(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
+    float speed = 0.0f;
+    while (frontDistance > backDistance) {
+        motor.updateMotors(1, 1, speed, speed); // turn left
+        speed += 0.01f;
+        irBus.selectBus(frontBus);
+        frontDistance = irBus.measureDistanceCm();
+        irBus.selectBus(backBus);
+        backDistance = irBus.measureDistanceCm();
+        if (fabs(frontDistance - backDistance) < errorLimit) {
+            break;
+        }
+        delay(50);
+    }
+    motor.stopMotors();
+    delay(10);
 }
 
 void straighten() {
@@ -303,94 +320,31 @@ void straighten() {
         return;
     }
 
+    // if right is closer to wall
     if ((dLF + dLB) < (dRF + dRB)) {
         if (fabs(dLF - dLB) < errorLimit) {
             return;
         }
-
         if (dLF < dLB) {
             Serial.println("Aligning right to follow the left wall");
-            float speed = 0.0f;
-            while (dLF < dLB) {
-                motor.updateMotors(0, 0, speed, speed); // turn right
-                speed += 0.01f;
-
-                irBus.selectBus(0);
-                dLF = irBus.measureDistanceCm();
-                irBus.selectBus(1);
-                dLB = irBus.measureDistanceCm();
-
-                if (fabs(dLF - dLB) < errorLimit) {
-                    break;
-                }
-                delay(50);
-            }
-            motor.stopMotors();
-            delay(10);
+            alignRight(dLF, dLB, 0, 1, errorLimit);
         } else if (dLF > dLB) {
             Serial.println("Aligning left to follow the left wall");
-            float speed = 0.0f;
-            while (dLF > dLB) {
-                motor.updateMotors(1, 1, speed, speed); // turn left
-                speed += 0.01f;
-
-                irBus.selectBus(0);
-                dLF = irBus.measureDistanceCm();
-                irBus.selectBus(1);
-                dLB = irBus.measureDistanceCm();
-                if (fabs(dLF - dLB) < 0.5) {
-                    break;
-                }
-                delay(50);
-            }
-            motor.stopMotors();
-            delay(10);
+            alignLeft(dLF, dLB, 0, 1, errorLimit);
         }
+        // if left is closer to wall
     } else if ((dLF + dLB) > (dRF + dRB)) {
         if (fabs(dRF - dRB) < errorLimit) {
             return;
         }
         if (dRF < dRB) {
             Serial.println("Aligning left to follow the right wall");
-            float speed = 0.0f;
-            while (dRF < dRB) {
-                motor.updateMotors(1, 1, speed, speed); // turn left
-                speed += 0.01f;
-
-                irBus.selectBus(2);
-                dRF = irBus.measureDistanceCm();
-                irBus.selectBus(3);
-                dRB = irBus.measureDistanceCm();
-                if (fabs(dRF - dRB) < 0.5) {
-                    break;
-                }
-                delay(50);
-            }
-            motor.stopMotors();
-            delay(10);
+            alignLeft(dRF, dRB, 2, 3, errorLimit);
         } else if (dRF > dRB) {
             Serial.println("Aligning right to follow the right wall");
-            float speed = 0.0f;
-            while (dRF > dRB) {
-                motor.updateMotors(0, 0, speed, speed); // turn right
-                speed += 0.01f;
-
-                irBus.selectBus(2);
-                dRF = irBus.measureDistanceCm();
-                irBus.selectBus(3);
-                dRB = irBus.measureDistanceCm();
-                if (fabs(dRF - dRB) < 0.5) {
-                    break;
-                }
-                delay(50);
-            }
-            motor.stopMotors();
-            delay(10);
+            alignRight(dRF, dRB, 2, 3, errorLimit);
         }
     }
-}
-
-void localiseWalls() {
 }
 
 void moveForwardToWall() {
@@ -466,8 +420,6 @@ void movementStateMachine() {
                 currentState = U_TURN;
             }
         } else {
-            moveForward(0.5f);
-            ;
         }
         break;
     case TURN_LEFT:
@@ -504,6 +456,7 @@ void setup() {
     // movementThread.start(movementStateMachine);
 
     mapInstance.initializeGrid();
+    mapInstance.setRobotPosition(1, 1);
 
     Serial.println("Started Robot");
 }
@@ -512,22 +465,29 @@ void setup() {
 Main Loop
 */
 void loop() {
+    for (int i = 0; i < 90; i += 10) {
+        turnLeft(10, 0.3f);
 
-    turnLeft(10, 0.3f);
+        irBus.selectBus(0);
+        float dLF = irBus.measureDistanceCm();
+        irBus.selectBus(1);
+        float dLB = irBus.measureDistanceCm();
+        irBus.selectBus(2);
+        float dRF = irBus.measureDistanceCm();
+        irBus.selectBus(3);
+        float dRB = irBus.measureDistanceCm();
+        float dFront = us1.measureDistanceCm();
+        float dBack = us2.measureDistanceCm();
 
-    irBus.selectBus(0);
-    float dLF = irBus.measureDistanceCm();
-    irBus.selectBus(1);
-    float dLB = irBus.measureDistanceCm();
-    irBus.selectBus(2);
-    float dRF = irBus.measureDistanceCm();
-    irBus.selectBus(3);
-    float dRB = irBus.measureDistanceCm();
-    float dFront = us1.measureDistanceCm();
-    float dBack = us2.measureDistanceCm();
+        mapInstance.updateGrid(dLF, dLB, dRF, dRB, dFront, dBack);
+        mapInstance.printGrid();
 
-    mapInstance.updateGrid(coords, dLF, dLB, dRF, dRB, dFront, dBack);
-    mapInstance.printGrid();
-    delay(10000);
+        delay(1000);
+    }
+
+    Serial.println();
+
+    moveForward(20, 0.5);
+
     Serial.println("loop end");
 }
