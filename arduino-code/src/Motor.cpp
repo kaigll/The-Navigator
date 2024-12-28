@@ -39,16 +39,18 @@ void Motor::updateMotors(float speedA, float speedB) {
 }
 
 void Motor::syncMotors() {
-    int diff = abs(encoderA - encoderB);
+    while (true) {
+        int diff = abs(encoderA - encoderB);
 
-    if (abs(encoderA) < abs(encoderB)) {
-        updateMotors(motorBSpeed, 0);
-    } else if (abs(encoderA) > abs(encoderB)) {
-        updateMotors(0, motorBSpeed);
-    } else {
-        updateMotors(motorASpeed, motorBSpeed);
+        if (abs(encoderA) < abs(encoderB)) {
+            updateMotors(motorBSpeed, 0);
+        } else if (abs(encoderA) > abs(encoderB)) {
+            updateMotors(0, motorBSpeed);
+        } else {
+            updateMotors(motorASpeed, motorBSpeed);
+        }
+        thread_sleep_for(1);
     }
-    Serial.println("syncing....");
 }
 
 void Motor::stopMotorA() { motorAPWM.write(0.0f); }
@@ -56,6 +58,7 @@ void Motor::stopMotorA() { motorAPWM.write(0.0f); }
 void Motor::stopMotorB() { motorBPWM.write(0.0f); }
 
 void Motor::stopMotors() {
+    Serial.println("STOPPING");
     motorAPWM.write(0.0f);
     motorBPWM.write(0.0f);
 }

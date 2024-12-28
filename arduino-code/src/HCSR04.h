@@ -12,6 +12,7 @@
 #define HCSR04_H
 
 #include <Arduino.h>
+#include <rtos.h>
 
 class UltraSonicDistanceSensor {
 public:
@@ -56,6 +57,7 @@ private:
     byte triggerPin;
     unsigned short maxDistanceCm;
     unsigned long maxTimeoutMicroSec;
+    rtos::Mutex mutex; // Mutex to avoid simultaneous calls
 };
 
 #endif // HCSR04_H

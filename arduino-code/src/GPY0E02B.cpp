@@ -10,12 +10,15 @@ mbed::I2C i2c(P0_31, P0_2);
 GPY0E02B::GPY0E02B() {}
 
 void GPY0E02B::selectBus(int bus) {
+    mutex.lock();
     const char mux_cmd = 1 << bus;
     const char mux_addr = 0xEE;
     i2c.write(mux_addr, &mux_cmd, 1);
+    mutex.unlock();
 }
 
 float GPY0E02B::measureDistanceCm() {
+    mutex.lock();
     char cmd = 0x5E; // Register address from the task
     char data[2];
     byte sensorAddress = 0x80;
@@ -27,5 +30,6 @@ float GPY0E02B::measureDistanceCm() {
     uint16_t combinedData = (data[0] << 4) | data[1];
     float distance = static_cast<float>(combinedData) / 64.0;
 
+    mutex.unlock();
     return distance;
 }

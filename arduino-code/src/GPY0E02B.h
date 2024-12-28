@@ -7,6 +7,7 @@
 
 #include <Arduino.h>
 #include <mbed.h>
+#include <rtos.h>
 
 class GPY0E02B {
 public:
@@ -27,6 +28,7 @@ public:
 
 private:
     byte _address;
+    rtos::Mutex mutex; // Mutex to avoid simultaneous calls
 };
 
 #endif

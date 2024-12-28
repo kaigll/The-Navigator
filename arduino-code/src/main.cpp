@@ -24,246 +24,142 @@ GPY0E02B irBus;
 // Motor B is the Right
 Motor motor(P0_4, P0_5, P0_27, P1_2);
 
-#define FIRMWARE_SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
-#define FIRMWARE_CHARACTERISTIC_UUID "abcdefab-cdef-abcd-efab-cdefabcdefab"
-
-// Initialize the BLE services and characteristics
-BLEService controlService("180A"); // BLE LED Service
-BLEByteCharacteristic directionCharacteristic("1337", BLERead | BLEWrite);
-BLEService firmwareService(FIRMWARE_SERVICE_UUID);
-BLECharacteristic firmwareCharacteristic(FIRMWARE_CHARACTERISTIC_UUID, BLEWrite, 512);
-
 // Declarning Threads
-rtos::Thread bluetoothThread;
 rtos::Thread motorSyncThread;
-rtos::Thread straightenThread;
-rtos::Thread movementThread;
+rtos::Thread updateThread;
 
-enum State {
-    MOVE_FORWARD,
-    TURN_LEFT,
-    TURN_RIGHT,
-    STRAIGHTEN,
-    U_TURN
+enum RobotState {
+    IDLE,
+    TURNING_LEFT,
+    TURNING_RIGHT,
+    MOVING_FORWARD
 };
 
-State currentState = MOVE_FORWARD;
+RobotState robotState = IDLE;
+float targetDistance;
+float currentDistance;
+float moveSpeed;
 
 Map mapInstance(29, 40, 5); // maze is roughly 145cm x 200cm
 
-void bluetoothSetup() {
-    pinMode(LED_BUILTIN, OUTPUT);
-    if (!BLE.begin()) {
-        Serial.println("Could not start BLE!");
-        exit(1);
-    }
-    // set advertised local name and service UUID:
-    BLE.setLocalName("The Navigator");
-    BLE.setAdvertisedService(controlService);
-    // Add characteristics to the control service
-    controlService.addCharacteristic(directionCharacteristic);
-    BLE.addService(controlService);
+struct Action {
+    RobotState state;
+    float value; // Angle for turning, distance for moving forward
+    float speed;
+};
 
-    // Add the firmware update service and characteristic
-    firmwareService.addCharacteristic(firmwareCharacteristic);
-    BLE.addService(firmwareService);
-    // set the initial value for the characteristic:
-    directionCharacteristic.writeValue(0);
-    // start advertising
-    BLE.advertise();
+#define MAX_ACTIONS 10
 
-    Serial.println("BLE services initialized, waiting for connections...");
-}
+Action actionQueue[MAX_ACTIONS];
+int actionCount = 0;
+int currentActionIndex = 0;
 
-/*
-Arduino Bluetooh example code
-*/
-void bluetoothTest() {
-    while (true) {
-        // listen for BLE peripherals to connect:
-        BLEDevice central = BLE.central();
-        // if a central is connected to peripheral:
-        if (central) {
-            Serial.print("Connected to central: ");
-            // print the central's MAC address:
-            Serial.println(central.address());
-
-            // while the central is still connected to peripheral:
-            while (central.connected()) {
-                // if the remote device wrote to the characteristic,
-                // use the value to control the LED:
-                if (directionCharacteristic.written()) {
-                    switch (directionCharacteristic.value()) { // any value other than 0
-                    case 1:
-                        Serial.println("Forward");
-                        digitalWrite(LED_BUILTIN,
-                                     HIGH); // will turn the LED on
-                        break;
-                    case 2:
-                        Serial.println("Left");
-                        digitalWrite(LED_BUILTIN,
-                                     HIGH); // will turn the LED on
-                        delay(500);
-                        digitalWrite(LED_BUILTIN,
-                                     LOW); // will turn the LED off
-                        delay(500);
-                        digitalWrite(LED_BUILTIN,
-                                     HIGH); // will turn the LED on
-                        delay(500);
-                        digitalWrite(LED_BUILTIN,
-                                     LOW); // will turn the LED off
-                        break;
-                    case 3:
-                        Serial.println("Right");
-                        digitalWrite(LED_BUILTIN,
-                                     HIGH); // will turn the LED on
-                        delay(1000);
-                        digitalWrite(LED_BUILTIN,
-                                     LOW); // will turn the LED off
-                        delay(1000);
-                        digitalWrite(LED_BUILTIN,
-                                     HIGH); // will turn the LED on
-                        delay(1000);
-                        digitalWrite(LED_BUILTIN,
-                                     LOW); // will turn the LED off
-                        break;
-                    default:
-                        Serial.println(F("Stop"));
-                        digitalWrite(LED_BUILTIN,
-                                     LOW); // will turn the LED off
-                        break;
-                    }
-                }
-            }
-
-            // when the central disconnects, print it out:
-            Serial.print(F("Disconnected from central: "));
-            Serial.println(central.address());
-            digitalWrite(LED_BUILTIN, LOW); // will turn the LED off
-        }
-    }
-}
-
-/*
-Read from ir sensor on i2c
-*/
-void readIRSensor(GPY0E02B ir) {
-    float distance = ir.measureDistanceCm();
-    if (distance != -1) {
-        Serial.print("Distance: ");
-        Serial.print(distance);
-        Serial.println(" cm");
+void enqueueAction(RobotState state, float value, float speed) {
+    if (actionCount < MAX_ACTIONS) {
+        actionQueue[actionCount++] = {state, value, speed};
+        Serial.println("Action added to queue.");
     } else {
-        Serial.println("Error reading sensor data");
+        Serial.println("Action queue is full.");
     }
-}
-
-/*
-Read from ultrasonic sensor
-*/
-void readUltrasonicSensor(UltraSonicDistanceSensor us) {
-    float distance = us.measureDistanceCm();
-    if (distance != -1) {
-        Serial.print("Distance: ");
-        Serial.print(distance);
-        Serial.println(" cm");
-    } else {
-        Serial.println("Error reading sensor data");
-    }
-}
-
-void moveForward(float distance, float speed) {
-    Serial.print("Attempting to move forwards ");
-    Serial.print(distance);
-    Serial.println(" cm...");
-
-    motor.resetCount();
-    motor.updateMotors(0, 1, speed, speed);
-
-    while (true) {
-        float distA = motor.calculateDistanceA();
-        float distB = motor.calculateDistanceB();
-
-        if (abs(distA) >= distance || abs(distB) >= distance) {
-            break;
-        }
-        
-        delay(10);
-    }
-
-    mapInstance.moveRobotForward(distance);
-    motor.stopMotorA();
-    motor.stopMotorB();
-    motor.resetCount();
-}
-
-void moveBackward(float distance, float speed) {
-    Serial.print("Attempting to move backwards ");
-    Serial.print(distance);
-    Serial.println(" cm...");
-
-    motor.resetCount();
-    motor.updateMotors(1, 0, speed, speed);
-
-    while (true) {
-        float distA = motor.calculateDistanceA();
-        float distB = motor.calculateDistanceB();
-
-        if (abs(distA) >= distance || abs(distB) >= distance) {
-            break;
-        }
-        delay(10);
-    }
-    // ISSUE NO MAPPING
-    motor.stopMotorA();
-    motor.stopMotorB();
-    motor.resetCount();
-}
-
-void turnRight(float angle, float speed) {
-    Serial.print("Attempting to turn ");
-    Serial.print(angle);
-    Serial.println(" degrees...");
-
-    float quarterCircumference = (angle / 360) * 13.8 * PI;
-    motor.resetCount();
-    motor.updateMotors(0, 0, 0.5f, 0.5f);
-    while (true) {
-        float distA = motor.calculateDistanceA();
-        float distB = motor.calculateDistanceB();
-
-        if (abs(distA) >= quarterCircumference || abs(distB) >= quarterCircumference) {
-            break;
-        }
-        delay(10);
-    }
-    mapInstance.turnRobotRight(angle);
-    motor.stopMotorA();
-    motor.stopMotorB();
-    motor.resetCount();
 }
 
 void turnLeft(float angle, float speed) {
-    Serial.print("Attempting to turn ");
+    Serial.print("Attempting to turn left ");
     Serial.print(angle);
     Serial.println(" degrees...");
 
-    float quarterCircumference = (angle / 360) * 13.8 * PI;
+    float partialCircumference = (angle / 360) * 13.8 * PI;
+    targetDistance = partialCircumference;
+    currentDistance = 0;
+    moveSpeed = speed;
+    robotState = TURNING_LEFT;
     motor.resetCount();
     motor.updateMotors(1, 1, speed, speed);
+}
+
+void turnRight(float angle, float speed) {
+    Serial.print("Attempting to turn right ");
+    Serial.print(angle);
+    Serial.println(" degrees...");
+
+    float partialCircumference = (angle / 360) * 13.8 * PI;
+    targetDistance = partialCircumference;
+    currentDistance = 0;
+    moveSpeed = speed;
+    robotState = TURNING_RIGHT;
+    motor.resetCount();
+    motor.updateMotors(0, 0, speed, speed);
+}
+
+void moveForward(float distance, float speed) {
+    Serial.print("Attempting to move forward ");
+    Serial.print(distance);
+    Serial.println(" cm...");
+
+    targetDistance = distance;
+    currentDistance = 0;
+    moveSpeed = speed;
+    robotState = MOVING_FORWARD;
+    motor.resetCount();
+    motor.updateMotors(0, 1, speed, speed);
+}
+
+void update() {
     while (true) {
         float distA = motor.calculateDistanceA();
         float distB = motor.calculateDistanceB();
 
-        if (abs(distA) >= quarterCircumference || abs(distB) >= quarterCircumference) {
+        switch (robotState) {
+        case TURNING_LEFT:
+        case TURNING_RIGHT:
+            currentDistance = (abs(distA) + abs(distB)) / 2;
+
+            if (currentDistance >= targetDistance) {
+                motor.stopMotors();
+                thread_sleep_for(10);
+                motor.resetCount();
+                Serial.println("Turn complete.");
+                currentActionIndex++;
+                robotState = IDLE;
+            }
             break;
+
+        case MOVING_FORWARD:
+            currentDistance = (abs(distA) + abs(distB)) / 2;
+
+            if (currentDistance >= targetDistance) {
+                motor.stopMotors();
+                thread_sleep_for(10);
+                motor.resetCount();
+                Serial.println("Move complete.");
+                currentActionIndex++;
+                robotState = IDLE;
+            }
+            break;
+
+        case IDLE:
+        default:
+            if (currentActionIndex < actionCount) {
+                Action &action = actionQueue[currentActionIndex];
+                switch (action.state) {
+                case TURNING_LEFT:
+                    turnLeft(action.value, action.speed);
+                    break;
+                case TURNING_RIGHT:
+                    turnRight(action.value, action.speed);
+                    break;
+                case MOVING_FORWARD:
+                    moveForward(action.value, action.speed);
+                    break;
+                default:
+                    break;
+                }
+                // Do nothing
+                break;
+            }
+            thread_sleep_for(10);
         }
-        delay(10);
     }
-    mapInstance.turnRobotLeft(angle);
-    motor.stopMotorA();
-    motor.stopMotorB();
-    motor.resetCount();
 }
 
 void alignRight(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
@@ -278,10 +174,10 @@ void alignRight(float &frontDistance, float &backDistance, int frontBus, int bac
         if (fabs(frontDistance - backDistance) < errorLimit) {
             break;
         }
-        delay(50);
+        thread_sleep_for(50);
     }
     motor.stopMotors();
-    delay(10);
+    thread_sleep_for(10);
 }
 
 void alignLeft(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
@@ -296,10 +192,10 @@ void alignLeft(float &frontDistance, float &backDistance, int frontBus, int back
         if (fabs(frontDistance - backDistance) < errorLimit) {
             break;
         }
-        delay(50);
+        thread_sleep_for(50);
     }
     motor.stopMotors();
-    delay(10);
+    thread_sleep_for(10);
 }
 
 void straighten() {
@@ -363,11 +259,11 @@ void moveForwardToWall() {
             wallFound = true;
             break;
         } else {
-            delay(50);
+            thread_sleep_for(50);
         }
         if (abs(us1.measureDistanceCm() - lastDistance) < 0.1 || abs(motor.calculateDistanceA() - lastDistA) < 0.001 || abs(motor.calculateDistanceB() - lastDistB) < 0.001) {
             motor.updateMotors(1, 0, speed, speed);
-            delay(300);
+            thread_sleep_for(300);
             return;
         } else {
             lastDistA = motor.calculateDistanceA();
@@ -398,96 +294,30 @@ void moveForwardToWall() {
     moveForwardToWall();
 }
 
-void movementStateMachine() {
-    irBus.selectBus(0);
-    float dLF = irBus.measureDistanceCm();
-    irBus.selectBus(1);
-    float dLB = irBus.measureDistanceCm();
-    irBus.selectBus(2);
-    float dRF = irBus.measureDistanceCm();
-    irBus.selectBus(3);
-    float dRB = irBus.measureDistanceCm();
-    float dFront = us1.measureDistanceCm();
-
-    switch (currentState) {
-    case MOVE_FORWARD:
-        if (dFront < 6) {
-            if (dLF > 10) {
-                currentState = TURN_LEFT;
-            } else if (dRF > 10) {
-                currentState = TURN_RIGHT;
-            } else {
-                currentState = U_TURN;
-            }
-        } else {
-        }
-        break;
-    case TURN_LEFT:
-        turnLeft(90, 0.4f);
-        currentState = MOVE_FORWARD;
-        break;
-    case TURN_RIGHT:
-        turnRight(90, 0.4f);
-        currentState = MOVE_FORWARD;
-        break;
-    case U_TURN:
-        turnLeft(180, 0.5f);
-        currentState = MOVE_FORWARD;
-        break;
-    default:
-        currentState = MOVE_FORWARD;
-        break;
-    }
-    delay(100);
-}
-
-/*
-Main Setup
-*/
 void setup() {
-    delay(1000);
-    Serial.begin(9600); // uncomment when not using bluetooth
-    // Serial.begin(115200); // uncomment when using bluetooth
-    // bluetoothSetup();
-    // bluetoothThread.start(bluetoothTest);
+    Serial.begin(9600);
+
+    delay(100);
+
     motor.setup();
     motor.startCounting();
-    motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
-    // movementThread.start(movementStateMachine);
+    // motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
 
-    mapInstance.initializeGrid();
-    mapInstance.setRobotPosition(1, 1);
+    mapInstance.setRobotPosition(1, 1, 0);
+
+    updateThread.start(update);
 
     Serial.println("Started Robot");
+
+    thread_sleep_for(1000);
+
+    enqueueAction(TURNING_LEFT, 90, 0.5f);
+    enqueueAction(MOVING_FORWARD, 10, 0.5f);
+    enqueueAction(TURNING_RIGHT, 45, 0.5f);
+    enqueueAction(MOVING_FORWARD, 5, 0.5f);
+
 }
 
-/*
-Main Loop
-*/
 void loop() {
-    for (int i = 0; i < 90; i += 10) {
-        turnLeft(10, 0.3f);
-
-        irBus.selectBus(0);
-        float dLF = irBus.measureDistanceCm();
-        irBus.selectBus(1);
-        float dLB = irBus.measureDistanceCm();
-        irBus.selectBus(2);
-        float dRF = irBus.measureDistanceCm();
-        irBus.selectBus(3);
-        float dRB = irBus.measureDistanceCm();
-        float dFront = us1.measureDistanceCm();
-        float dBack = us2.measureDistanceCm();
-
-        mapInstance.updateGrid(dLF, dLB, dRF, dRB, dFront, dBack);
-        mapInstance.printGrid();
-
-        delay(1000);
-    }
-
-    Serial.println();
-
-    moveForward(20, 0.5);
-
-    Serial.println("loop end");
+    // nothing
 }

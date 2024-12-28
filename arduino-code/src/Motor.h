@@ -79,7 +79,7 @@ private:
     mbed::DigitalOut motorBDir; // Digital pin for motor B direction control
     mbed::PwmOut motorAPWM;     // PWM pin for motor A speed control
     mbed::PwmOut motorBPWM;     // PWM pin for motor B speed control
-    rtos::Mutex mutex;          // Single mutex to ensure atomic updates
+    rtos::Mutex mutex;          // Mutex to prevent simultaneous calls
     float motorASpeed;
     float motorBSpeed;
 
