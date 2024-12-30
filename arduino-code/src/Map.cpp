@@ -43,20 +43,24 @@ void Map::setRobotPosition(int x, int y, int angle) {
 }
 
 void Map::moveRobotForward(int distance) {
-    // Move the robot forward by distance cells in the current direction
-    for (int i = 0; i < distance; ++i) {
-        int newX = robotX + round(cos(radians(robotAngle)) * cellSize);
-        int newY = robotY + round(sin(radians(robotAngle)) * cellSize);
-        if (newX < 0 || newX >= width || newY < 0 || newY >= height || getCell(newX, newY) == OBSTACLE) {
-            Serial.println("Obstacle encountered or out of bounds!");
-            break;
-        }
-        setRobotPosition(newX, newY, robotAngle);
+    // Calculate the new position in one go
+    int deltaX = round(cos(radians(robotAngle)) * distance / cellSize);
+    int deltaY = round(sin(radians(robotAngle)) * distance / cellSize);
+    int newX = robotX + deltaX;
+    int newY = robotY + deltaY;
+
+    // Check for out-of-bounds or obstacles in the path
+    if (newX < 0 || newX >= width || newY < 0 || newY >= height || getCell(newX, newY) == OBSTACLE) {
+        Serial.println("Obstacle encountered or out of bounds!");
+        return;
     }
+
+    // Set the new robot position
+    setRobotPosition(newX, newY, robotAngle);
 }
 
 void Map::rotateRobotLeft(int degrees) {
-    robotAngle = (robotAngle + 360 - degrees) % 360; // Rotate counterclockwise
+    robotAngle = (robotAngle + 360 - degrees) % 360; // Rotate anticlockwise
     setCell(robotX, robotY, ROBOT_LOCATION);         // Update robot position with the new direction
 }
 
@@ -77,48 +81,81 @@ int Map::getRobotAngle() {
     return robotAngle;
 }
 
-void Map::updateGridWithSensorData(float distance, int sensorOffsetX, int sensorOffsetY, int sensorAngle) {
-    // Calculate the sensor's position relative to the robot
-    int sensorX = robotX + round(cos(radians(robotAngle)) * sensorOffsetX - sin(radians(robotAngle)) * sensorOffsetY);
-    int sensorY = robotY + round(sin(radians(robotAngle)) * sensorOffsetX + cos(radians(robotAngle)) * sensorOffsetY);
-    // Calculate the endpoint based on the sensor angle and distance
-    int endX = sensorX + round(cos(radians(sensorAngle)) * distance / cellSize);
-    int endY = sensorY + round(sin(radians(sensorAngle)) * distance / cellSize);
-    // Mark the line from the sensor position to the endpoint as FREE_SPACE
-    markPath(sensorX, sensorY, endX, endY);
+std::pair<int, int> Map::calculateGlobalPosition(float offsetX, float offsetY, float distance, float sensorAngle) {
+    float rad = fmod((robotAngle + sensorAngle), 360.0f) * (PI / 180.0); // Convert orientation to radians
+    int globalX = robotX + static_cast<int>((offsetX + distance * -sin(rad)) / cellSize);
+    int globalY = robotY + static_cast<int>((offsetY + distance * cos(rad)) / cellSize);
+    Serial.println((String)globalX + ", " + globalY);
+
+    return std::make_pair(globalX, globalY);
 }
 
-void Map::markPath(int x0, int y0, int x1, int y1) {
-    // Use Bresenham's Line Algorithm to mark all cells along the line
-    int dx = abs(x1 - x0);
-    int dy = abs(y1 - y0);
-    int sx = (x0 < x1) ? 1 : -1;
-    int sy = (y0 < y1) ? 1 : -1;
+void Map::updateGridWithSensor(float sensorX, float sensorY, float distance, float sensorAngle) {
+    std::pair<int, int> globalPosition = calculateGlobalPosition(sensorX / cellSize, sensorY / cellSize, distance, sensorAngle);
+    int cellX = globalPosition.first;
+    int cellY = globalPosition.second;
+    if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
+        markPath(robotX, robotY, cellX, cellY); // Mark path to the obstacle
+        setCell(cellX, cellY, OBSTACLE);        // Mark the obstacle itself
+    }
+}
+
+void Map::updateGrid(float dLF, float dLB, float dRF, float dRB, float dF, float dB) {
+    updateGridWithSensor(sensorF_X, sensorF_Y, dF, 0);
+    updateGridWithSensor(sensorB_X, sensorB_Y, dB, 180);
+    updateGridWithSensor(sensorLF_X, sensorLF_Y, dLF, 270);
+    updateGridWithSensor(sensorLB_X, sensorLB_Y, dLB, 270);
+    updateGridWithSensor(sensorRF_X, sensorRF_Y, dRF, 90);
+    updateGridWithSensor(sensorRB_X, sensorRB_Y, dRB, 90);
+
+    setCell(robotX, robotY, ROBOT_LOCATION); // Mark the robot's current location
+}
+
+void Map::updateGrid(float dLF, float dLB, float dRF, float dRB) {
+    updateGridWithSensor(sensorLF_X, sensorLF_Y, dLF, 270);
+    updateGridWithSensor(sensorLB_X, sensorLB_Y, dLB, 270);
+    updateGridWithSensor(sensorRF_X, sensorRF_Y, dRF, 90);
+    updateGridWithSensor(sensorRB_X, sensorRB_Y, dRB, 90);
+
+    setCell(robotX, robotY, ROBOT_LOCATION); // Mark the robot's current location
+}
+
+void Map::markPath(int startX, int startY, int endX, int endY) {
+    int x = startX;
+    int y = startY;
+    int dx = abs(endX - startX);
+    int dy = abs(endY - startY);
+    int sx = (startX < endX) ? 1 : -1;
+    int sy = (startY < endY) ? 1 : -1;
     int err = dx - dy;
+
     while (true) {
-        // Set cells along the line as FREE_SPACE
-        setCell(x0, y0, FREE_SPACE);
-        if (x0 == x1 && y0 == y1)
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+            setCell(x, y, FREE_SPACE);
+        }
+        if (x == endX && y == endY)
             break;
-        int e2 = err * 2;
+        int e2 = 2 * err;
         if (e2 > -dy) {
             err -= dy;
-            x0 += sx;
+            x += sx;
         }
         if (e2 < dx) {
             err += dx;
-            y0 += sy;
+            y += sy;
         }
     }
-    // Set the endpoint as OBSTACLE
-    setCell(x1, y1, OBSTACLE);
 }
 
 // Debugging method
 void Map::printGrid() {
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
-            Serial.print(getCell(x, y));
+            if (getCell(x, y) == FREE_SPACE) {
+                Serial.print(".");
+            } else {
+                Serial.print(getCell(x, y));
+            }
             Serial.print(" ");
         }
         Serial.println();

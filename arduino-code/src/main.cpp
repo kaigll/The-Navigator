@@ -8,6 +8,7 @@
 
 #include <Coordinate.h>
 #include <Map.h>
+#include <queue>
 
 // US 1 Front
 UltraSonicDistanceSensor us1(7);
@@ -28,6 +29,10 @@ Motor motor(P0_4, P0_5, P0_27, P1_2);
 rtos::Thread motorSyncThread;
 rtos::Thread updateThread;
 
+// Initialise map
+Map mapInstance(29, 40, 5); // maze is roughly 145cm x 200cm
+
+// Define all possible states
 enum RobotState {
     IDLE,
     TURNING_LEFT,
@@ -38,72 +43,61 @@ enum RobotState {
 RobotState robotState = IDLE;
 float targetDistance;
 float currentDistance;
-float moveSpeed;
 
-Map mapInstance(29, 40, 5); // maze is roughly 145cm x 200cm
-
+// Define an action struct to allow for movement planning
 struct Action {
     RobotState state;
-    float value; // Angle for turning, distance for moving forward
+    float value; // for turning: angle, for moving: distance
     float speed;
 };
 
-#define MAX_ACTIONS 10
-
-Action actionQueue[MAX_ACTIONS];
-int actionCount = 0;
-int currentActionIndex = 0;
+std::queue<Action> actionQueue;
 
 void enqueueAction(RobotState state, float value, float speed) {
-    if (actionCount < MAX_ACTIONS) {
-        actionQueue[actionCount++] = {state, value, speed};
-        Serial.println("Action added to queue.");
-    } else {
-        Serial.println("Action queue is full.");
-    }
+    actionQueue.push({state, value, speed});
+    Serial.println((String) "Addeed:" + state + " to action queue");
 }
 
 void turnLeft(float angle, float speed) {
-    Serial.print("Attempting to turn left ");
-    Serial.print(angle);
-    Serial.println(" degrees...");
+    Serial.println((String) "Attempting to turn left " + angle + " degrees...");
 
     float partialCircumference = (angle / 360) * 13.8 * PI;
     targetDistance = partialCircumference;
     currentDistance = 0;
-    moveSpeed = speed;
     robotState = TURNING_LEFT;
     motor.resetCount();
+    mapInstance.rotateRobotLeft(angle);
     motor.updateMotors(1, 1, speed, speed);
 }
 
 void turnRight(float angle, float speed) {
-    Serial.print("Attempting to turn right ");
-    Serial.print(angle);
-    Serial.println(" degrees...");
+    Serial.println((String) "Attempting to turn right " + angle + " degrees...");
 
     float partialCircumference = (angle / 360) * 13.8 * PI;
     targetDistance = partialCircumference;
     currentDistance = 0;
-    moveSpeed = speed;
     robotState = TURNING_RIGHT;
     motor.resetCount();
+    mapInstance.rotateRobotRight(angle);
     motor.updateMotors(0, 0, speed, speed);
 }
 
 void moveForward(float distance, float speed) {
-    Serial.print("Attempting to move forward ");
-    Serial.print(distance);
-    Serial.println(" cm...");
+    Serial.println((String) "Attempting to move forward " + distance + " cm...");
 
     targetDistance = distance;
     currentDistance = 0;
-    moveSpeed = speed;
     robotState = MOVING_FORWARD;
     motor.resetCount();
+    mapInstance.moveRobotForward(distance);
     motor.updateMotors(0, 1, speed, speed);
 }
 
+/**
+ * The main movement controlling thread is within this function,
+ * this is simply a state machine for the current state, and will
+ * follow the current queue of moves assigned to the robot.
+ */
 void update() {
     while (true) {
         float distA = motor.calculateDistanceA();
@@ -119,7 +113,6 @@ void update() {
                 thread_sleep_for(10);
                 motor.resetCount();
                 Serial.println("Turn complete.");
-                currentActionIndex++;
                 robotState = IDLE;
             }
             break;
@@ -132,15 +125,16 @@ void update() {
                 thread_sleep_for(10);
                 motor.resetCount();
                 Serial.println("Move complete.");
-                currentActionIndex++;
                 robotState = IDLE;
             }
             break;
 
         case IDLE:
         default:
-            if (currentActionIndex < actionCount) {
-                Action &action = actionQueue[currentActionIndex];
+            if (!actionQueue.empty()) {
+                Action action = actionQueue.front();
+                actionQueue.pop();
+
                 switch (action.state) {
                 case TURNING_LEFT:
                     turnLeft(action.value, action.speed);
@@ -154,8 +148,7 @@ void update() {
                 default:
                     break;
                 }
-                // Do nothing
-                break;
+                // Do nothing when no actions are queued
             }
             thread_sleep_for(10);
         }
@@ -243,36 +236,30 @@ void straighten() {
     }
 }
 
-void moveForwardToWall() {
-    straighten();
-    straighten();
-    float speed = 0.5f;
-    motor.updateMotors(0, 1, speed, speed);
-    bool wallFound = false;
-    motor.resetCount();
-    float lastDistA = motor.calculateDistanceA();
-    float lastDistB = motor.calculateDistanceB();
-    float lastDistance = us1.measureDistanceCm();
-
-    while (!wallFound) {
-        if (lastDistance <= 5) {
-            wallFound = true;
-            break;
-        } else {
-            thread_sleep_for(50);
+void wallDetect() {
+    float dF = us1.measureDistanceCm();
+    if (dF < 5) {
+        irBus.selectBus(0);
+        float dLF = irBus.measureDistanceCm();
+        irBus.selectBus(2);
+        float dRF = irBus.measureDistanceCm();
+        if (dRF < dLF && actionQueue.front().state != TURNING_RIGHT) {
+            for (int i = 0; i < actionQueue.size(); i++)
+                actionQueue.pop();
+            enqueueAction(TURNING_RIGHT, 90, 0.5f);
+        } else if (actionQueue.front().state != TURNING_LEFT) {
+            for (int i = 0; i < actionQueue.size(); i++)
+                actionQueue.pop();
+            enqueueAction(TURNING_LEFT, 90, 0.5f);
         }
-        if (abs(us1.measureDistanceCm() - lastDistance) < 0.1 || abs(motor.calculateDistanceA() - lastDistA) < 0.001 || abs(motor.calculateDistanceB() - lastDistB) < 0.001) {
-            motor.updateMotors(1, 0, speed, speed);
-            thread_sleep_for(300);
-            return;
-        } else {
-            lastDistA = motor.calculateDistanceA();
-            lastDistB = motor.calculateDistanceB();
-            lastDistance = us1.measureDistanceCm();
-        }
+    } else if (actionQueue.front().state != MOVING_FORWARD) {
+        enqueueAction(MOVING_FORWARD, 5, 0.5f);
     }
-    motor.stopMotors();
+}
 
+void mapUpdate() {
+    float dF = us1.measureDistanceCm();
+    float dB = us1.measureDistanceCm();
     irBus.selectBus(0);
     float dLF = irBus.measureDistanceCm();
     irBus.selectBus(1);
@@ -282,16 +269,8 @@ void moveForwardToWall() {
     irBus.selectBus(3);
     float dRB = irBus.measureDistanceCm();
 
-    if (dLF > 10.0f && dRF < 10.0f) {
-        turnLeft(90, 0.4f);
-    } else if (dLF > 10.0f && dRF <= 10.0f) {
-        turnLeft(90, 0.4f);
-    } else if (dLF <= 10.0f && dRF > 10.0f) {
-        turnRight(90, 0.4f);
-    } else {
-        turnRight(90, 0.4f);
-    }
-    moveForwardToWall();
+    mapInstance.updateGrid(dLF, dLB, dRF, dRB, dF, dB);
+    mapInstance.printGrid();
 }
 
 void setup() {
@@ -299,25 +278,27 @@ void setup() {
 
     delay(100);
 
+    Serial.println("Started The Navigator");
+
     motor.setup();
     motor.startCounting();
     // motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
 
-    mapInstance.setRobotPosition(1, 1, 0);
+    mapInstance.setRobotPosition(5, 5, 0);
 
     updateThread.start(update);
 
-    Serial.println("Started Robot");
+    Serial.println("Setup complete");
 
     thread_sleep_for(1000);
 
-    enqueueAction(TURNING_LEFT, 90, 0.5f);
-    enqueueAction(MOVING_FORWARD, 10, 0.5f);
-    enqueueAction(TURNING_RIGHT, 45, 0.5f);
     enqueueAction(MOVING_FORWARD, 5, 0.5f);
-
+    enqueueAction(TURNING_LEFT, 90, 0.5f);
+    enqueueAction(MOVING_FORWARD, 5, 0.5f);
+    enqueueAction(TURNING_LEFT, 90, 0.5f);
 }
 
 void loop() {
-    // nothing
+    thread_sleep_for(1000);
+    mapUpdate();
 }

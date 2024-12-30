@@ -7,6 +7,7 @@
   Modified by Kai Gledhill-Lawson:
   - accmomodated for a bridged trigger and echo pin
   - small improvements to prevent blocking
+  - added mutex preventing simultaneous calls
 */
 
 #include "HCSR04.h"
