@@ -8,7 +8,8 @@
 // Constants representing different points on the map
 const uint8_t FREE_SPACE = 0;
 const uint8_t OBSTACLE = 1;
-const uint8_t ROBOT_LOCATION = 2;
+const uint8_t SEEN_LOCATION = 2;
+const uint8_t ROBOT_LOCATION = 3;
 
 class Map {
 public:
@@ -20,6 +21,8 @@ public:
 
     // Robot-related methods
     void setRobotPosition(int x, int y, int angle);
+    void identifyStartPosition(float dB, float dBR);
+
     void moveRobotForward(int distance);
     void rotateRobotLeft(int degrees);
     void rotateRobotRight(int degrees);

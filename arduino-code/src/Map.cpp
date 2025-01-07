@@ -1,6 +1,6 @@
 #include "Map.h"
 
-Map::Map(int w, int h, int cSize) : width(w), height(h), cellSize(cSize), robotX(0), robotY(0), robotAngle(0) {
+Map::Map(int w, int h, int cSize) : width(w), height(h), cellSize(cSize), robotX(0), robotY(0), robotAngle(90) {
     initGrid();
 }
 
@@ -33,12 +33,19 @@ uint8_t Map::getCell(int x, int y) {
 
 void Map::setRobotPosition(int x, int y, int angle) {
     // Clear the current robot position
-    setCell(robotX, robotY, FREE_SPACE);
+    setCell(robotX, robotY, SEEN_LOCATION);
 
     // Set the new robot position
     robotX = x;
     robotY = y;
     robotAngle = angle % 360; // Ensure angle is within 0-359
+    setCell(robotX, robotY, ROBOT_LOCATION);
+}
+
+void Map::identifyStartPosition(float dB, float dRB) {
+    robotX = dRB + sensorRB_X;
+    robotY = dB - sensorB_Y;
+
     setCell(robotX, robotY, ROBOT_LOCATION);
 }
 
@@ -61,12 +68,10 @@ void Map::moveRobotForward(int distance) {
 
 void Map::rotateRobotLeft(int degrees) {
     robotAngle = (robotAngle + 360 - degrees) % 360; // Rotate anticlockwise
-    setCell(robotX, robotY, ROBOT_LOCATION);         // Update robot position with the new direction
 }
 
 void Map::rotateRobotRight(int degrees) {
     robotAngle = (robotAngle + degrees) % 360; // Rotate clockwise
-    setCell(robotX, robotY, ROBOT_LOCATION);   // Update robot position with the new direction
 }
 
 int Map::getRobotX() {
@@ -83,8 +88,10 @@ int Map::getRobotAngle() {
 
 std::pair<int, int> Map::calculateGlobalPosition(float offsetX, float offsetY, float distance, float sensorAngle) {
     float rad = fmod((robotAngle + sensorAngle), 360.0f) * (PI / 180.0); // Convert orientation to radians
-    int globalX = robotX + static_cast<int>((offsetX + distance * -sin(rad)) / cellSize);
-    int globalY = robotY + static_cast<int>((offsetY + distance * cos(rad)) / cellSize);
+    float translatedX = offsetX + (distance * cos(rad));                 // Calculate X translation
+    float translatedY = offsetY + (distance * sin(rad));                 // Calculate Y translation
+    int globalX = static_cast<int>((robotX + translatedX) / cellSize);   // Convert to grid cell
+    int globalY = static_cast<int>((robotY + translatedY) / cellSize);   // Convert to grid cell
     Serial.println((String)globalX + ", " + globalY);
 
     return std::make_pair(globalX, globalY);
@@ -95,8 +102,8 @@ void Map::updateGridWithSensor(float sensorX, float sensorY, float distance, flo
     int cellX = globalPosition.first;
     int cellY = globalPosition.second;
     if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
-        markPath(robotX, robotY, cellX, cellY); // Mark path to the obstacle
-        setCell(cellX, cellY, OBSTACLE);        // Mark the obstacle itself
+        // markPath(robotX, robotY, cellX, cellY); // Mark path to the obstacle
+        setCell(cellX, cellY, OBSTACLE); // Mark the obstacle itself
     }
 }
 
@@ -121,6 +128,7 @@ void Map::updateGrid(float dLF, float dLB, float dRF, float dRB) {
 }
 
 void Map::markPath(int startX, int startY, int endX, int endY) {
+    // Bresenham's Line Algorithm
     int x = startX;
     int y = startY;
     int dx = abs(endX - startX);
@@ -156,7 +164,7 @@ void Map::printGrid() {
             } else {
                 Serial.print(getCell(x, y));
             }
-            Serial.print(" ");
+            Serial.print("");
         }
         Serial.println();
     }

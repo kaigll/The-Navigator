@@ -30,7 +30,8 @@ rtos::Thread motorSyncThread;
 rtos::Thread updateThread;
 
 // Initialise map
-Map mapInstance(29, 40, 5); // maze is roughly 145cm x 200cm
+// Map mapInstance(29, 40, 5); // maze is roughly 145cm x 200cm
+Map mapInstance(150, 200, 1);
 
 // Define all possible states
 enum RobotState {
@@ -259,7 +260,7 @@ void wallDetect() {
 
 void mapUpdate() {
     float dF = us1.measureDistanceCm();
-    float dB = us1.measureDistanceCm();
+    float dB = us2.measureDistanceCm();
     irBus.selectBus(0);
     float dLF = irBus.measureDistanceCm();
     irBus.selectBus(1);
@@ -284,21 +285,27 @@ void setup() {
     motor.startCounting();
     // motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
 
-    mapInstance.setRobotPosition(5, 5, 0);
-
+    thread_sleep_for(1000);
+    float dB = us2.measureDistanceCm();
+    irBus.selectBus(3);
+    float dRB = irBus.measureDistanceCm();
     updateThread.start(update);
+    mapInstance.identifyStartPosition(dB, dRB);
 
     Serial.println("Setup complete");
 
     thread_sleep_for(1000);
 
-    enqueueAction(MOVING_FORWARD, 5, 0.5f);
+    enqueueAction(MOVING_FORWARD, 20, 0.5f);
     enqueueAction(TURNING_LEFT, 90, 0.5f);
-    enqueueAction(MOVING_FORWARD, 5, 0.5f);
+    enqueueAction(MOVING_FORWARD, 20, 0.5f);
     enqueueAction(TURNING_LEFT, 90, 0.5f);
+    enqueueAction(MOVING_FORWARD, 20, 0.5f);
+    enqueueAction(TURNING_RIGHT, 90, 0.5f);
 }
 
 void loop() {
     thread_sleep_for(1000);
-    mapUpdate();
+    Serial.println((String)mapInstance.getRobotX() + ", " + mapInstance.getRobotY());
+    //mapUpdate();
 }
