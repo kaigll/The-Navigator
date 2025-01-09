@@ -38,7 +38,8 @@ enum RobotState {
     IDLE,
     TURNING_LEFT,
     TURNING_RIGHT,
-    MOVING_FORWARD
+    MOVING_FORWARD,
+    STRAIGHTEN
 };
 
 RobotState robotState = IDLE;
@@ -94,72 +95,10 @@ void moveForward(float distance, float speed) {
     motor.updateMotors(0, 1, speed, speed);
 }
 
-/**
- * The main movement controlling thread is within this function,
- * this is simply a state machine for the current state, and will
- * follow the current queue of moves assigned to the robot.
- */
-void update() {
-    while (true) {
-        float distA = motor.calculateDistanceA();
-        float distB = motor.calculateDistanceB();
-
-        switch (robotState) {
-        case TURNING_LEFT:
-        case TURNING_RIGHT:
-            currentDistance = (abs(distA) + abs(distB)) / 2;
-
-            if (currentDistance >= targetDistance) {
-                motor.stopMotors();
-                thread_sleep_for(10);
-                motor.resetCount();
-                Serial.println("Turn complete.");
-                robotState = IDLE;
-            }
-            break;
-
-        case MOVING_FORWARD:
-            currentDistance = (abs(distA) + abs(distB)) / 2;
-
-            if (currentDistance >= targetDistance) {
-                motor.stopMotors();
-                thread_sleep_for(10);
-                motor.resetCount();
-                Serial.println("Move complete.");
-                robotState = IDLE;
-            }
-            break;
-
-        case IDLE:
-        default:
-            if (!actionQueue.empty()) {
-                Action action = actionQueue.front();
-                actionQueue.pop();
-
-                switch (action.state) {
-                case TURNING_LEFT:
-                    turnLeft(action.value, action.speed);
-                    break;
-                case TURNING_RIGHT:
-                    turnRight(action.value, action.speed);
-                    break;
-                case MOVING_FORWARD:
-                    moveForward(action.value, action.speed);
-                    break;
-                default:
-                    break;
-                }
-                // Do nothing when no actions are queued
-            }
-            thread_sleep_for(10);
-        }
-    }
-}
-
-void alignRight(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
+void alignLeft(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
     float speed = 0.0f;
-    while (frontDistance < backDistance) {
-        motor.updateMotors(0, 0, speed, speed); // turn right
+    while (frontDistance > backDistance) {
+        motor.updateMotors(1, 1, speed, speed); // turn left
         speed += 0.01f;
         irBus.selectBus(frontBus);
         frontDistance = irBus.measureDistanceCm();
@@ -174,10 +113,10 @@ void alignRight(float &frontDistance, float &backDistance, int frontBus, int bac
     thread_sleep_for(10);
 }
 
-void alignLeft(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
+void alignRight(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
     float speed = 0.0f;
-    while (frontDistance > backDistance) {
-        motor.updateMotors(1, 1, speed, speed); // turn left
+    while (frontDistance < backDistance) {
+        motor.updateMotors(0, 0, speed, speed); // turn right
         speed += 0.01f;
         irBus.selectBus(frontBus);
         frontDistance = irBus.measureDistanceCm();
@@ -233,6 +172,69 @@ void straighten() {
         } else if (dRF > dRB) {
             Serial.println("Aligning right to follow the right wall");
             alignRight(dRF, dRB, 2, 3, errorLimit);
+        }
+    }
+}
+
+/**
+ * The main movement controlling thread is within this function,
+ * this is simply a state machine for the current state, and will
+ * follow the current queue of moves assigned to the robot.
+ */
+void update() {
+    while (true) {
+        float distA = motor.calculateDistanceA();
+        float distB = motor.calculateDistanceB();
+
+        switch (robotState) {
+        case TURNING_LEFT:
+        case TURNING_RIGHT:
+            currentDistance = (abs(distA) + abs(distB)) / 2;
+
+            if (currentDistance >= targetDistance) {
+                motor.stopMotors();
+                thread_sleep_for(10);
+                motor.resetCount();
+                Serial.println("Turn complete.");
+                robotState = IDLE;
+            }
+            break;
+
+        case MOVING_FORWARD:
+            currentDistance = (abs(distA) + abs(distB)) / 2;
+
+            if (currentDistance >= targetDistance) {
+                motor.stopMotors();
+                thread_sleep_for(10);
+                motor.resetCount();
+                Serial.println("Move complete.");
+                robotState = IDLE;
+            }
+            break;
+        case STRAIGHTEN:
+            straighten(); // eventually unpack this for simplicity
+        case IDLE:
+        default:
+            if (!actionQueue.empty()) {
+                Action action = actionQueue.front();
+                actionQueue.pop();
+
+                switch (action.state) {
+                case TURNING_LEFT:
+                    turnLeft(action.value, action.speed);
+                    break;
+                case TURNING_RIGHT:
+                    turnRight(action.value, action.speed);
+                    break;
+                case MOVING_FORWARD:
+                    moveForward(action.value, action.speed);
+                    break;
+                default:
+                    break;
+                }
+                // Do nothing when no actions are queued
+            }
+            thread_sleep_for(10);
         }
     }
 }
@@ -296,16 +298,12 @@ void setup() {
 
     thread_sleep_for(1000);
 
-    enqueueAction(MOVING_FORWARD, 20, 0.5f);
     enqueueAction(TURNING_LEFT, 90, 0.5f);
-    enqueueAction(MOVING_FORWARD, 20, 0.5f);
-    enqueueAction(TURNING_LEFT, 90, 0.5f);
-    enqueueAction(MOVING_FORWARD, 20, 0.5f);
-    enqueueAction(TURNING_RIGHT, 90, 0.5f);
 }
 
 void loop() {
-    thread_sleep_for(1000);
-    Serial.println((String)mapInstance.getRobotX() + ", " + mapInstance.getRobotY());
-    //mapUpdate();
+    enqueueAction(MOVING_FORWARD, 50, 0.7f);
+    thread_sleep_for(5000);
+    mapUpdate();
+    thread_sleep_for(5000);
 }

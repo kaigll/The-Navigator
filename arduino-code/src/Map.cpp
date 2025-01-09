@@ -50,11 +50,14 @@ void Map::identifyStartPosition(float dB, float dRB) {
 }
 
 void Map::moveRobotForward(int distance) {
+    distance = distance / cellSize;
     // Calculate the new position in one go
-    int deltaX = round(cos(radians(robotAngle)) * distance / cellSize);
-    int deltaY = round(sin(radians(robotAngle)) * distance / cellSize);
+    int deltaX = round(cos(radians(robotAngle)) * distance);
+    int deltaY = round(sin(radians(robotAngle)) * distance);
     int newX = robotX + deltaX;
     int newY = robotY + deltaY;
+
+    markPath(robotX, robotY, newX, newY, SEEN_LOCATION);
 
     // Check for out-of-bounds or obstacles in the path
     if (newX < 0 || newX >= width || newY < 0 || newY >= height || getCell(newX, newY) == OBSTACLE) {
@@ -87,11 +90,11 @@ int Map::getRobotAngle() {
 }
 
 std::pair<int, int> Map::calculateGlobalPosition(float offsetX, float offsetY, float distance, float sensorAngle) {
-    float rad = fmod((robotAngle + sensorAngle), 360.0f) * (PI / 180.0); // Convert orientation to radians
-    float translatedX = offsetX + (distance * cos(rad));                 // Calculate X translation
-    float translatedY = offsetY + (distance * sin(rad));                 // Calculate Y translation
-    int globalX = static_cast<int>((robotX + translatedX) / cellSize);   // Convert to grid cell
-    int globalY = static_cast<int>((robotY + translatedY) / cellSize);   // Convert to grid cell
+    float combinedAngle = fmod((robotAngle + sensorAngle), 360.0f);
+    float translatedX = (offsetX * cos(DEG_TO_RAD * robotAngle)) + (distance * cos(DEG_TO_RAD * combinedAngle)); // Calculate X translation
+    float translatedY = (offsetY * sin(DEG_TO_RAD * robotAngle)) + (distance * sin(DEG_TO_RAD * combinedAngle)); // Calculate Y translation
+    int globalX = static_cast<int>((robotX + translatedX) / cellSize);                                           // Convert to grid cell
+    int globalY = static_cast<int>((robotY + translatedY) / cellSize);                                           // Convert to grid cell
     Serial.println((String)globalX + ", " + globalY);
 
     return std::make_pair(globalX, globalY);
@@ -102,12 +105,17 @@ void Map::updateGridWithSensor(float sensorX, float sensorY, float distance, flo
     int cellX = globalPosition.first;
     int cellY = globalPosition.second;
     if (cellX >= 0 && cellX < width && cellY >= 0 && cellY < height) {
-        // markPath(robotX, robotY, cellX, cellY); // Mark path to the obstacle
-        setCell(cellX, cellY, OBSTACLE); // Mark the obstacle itself
+        markPath(robotX, robotY, cellX, cellY, FREE_SPACE); // Mark path to the obstacle
+        setCell(cellX, cellY, OBSTACLE);                    // Mark the obstacle itself
     }
 }
 
 void Map::updateGrid(float dLF, float dLB, float dRF, float dRB, float dF, float dB) {
+    if(!(dLF_prev == 0 || dLB_prev == 0 || dRF_prev == 0 || dRB_prev == 0 || dF_prev == 0 || dB_prev == 0)) {
+        // CONTINUE ....
+    }
+
+
     updateGridWithSensor(sensorF_X, sensorF_Y, dF, 0);
     updateGridWithSensor(sensorB_X, sensorB_Y, dB, 180);
     updateGridWithSensor(sensorLF_X, sensorLF_Y, dLF, 270);
@@ -115,7 +123,12 @@ void Map::updateGrid(float dLF, float dLB, float dRF, float dRB, float dF, float
     updateGridWithSensor(sensorRF_X, sensorRF_Y, dRF, 90);
     updateGridWithSensor(sensorRB_X, sensorRB_Y, dRB, 90);
 
+    // if front > (significant) back then you know the wall ends
+    // if back > (significant) front then you know new wall begins
+
     setCell(robotX, robotY, ROBOT_LOCATION); // Mark the robot's current location
+
+    dLF_prev = dLF, dLB_prev = dLB, dRF_prev = dRF, dRB_prev = dRB, dF_prev = dF, dB_prev = dB;
 }
 
 void Map::updateGrid(float dLF, float dLB, float dRF, float dRB) {
@@ -127,30 +140,33 @@ void Map::updateGrid(float dLF, float dLB, float dRF, float dRB) {
     setCell(robotX, robotY, ROBOT_LOCATION); // Mark the robot's current location
 }
 
-void Map::markPath(int startX, int startY, int endX, int endY) {
+void Map::markPath(int x1, int y1, int x2, int y2, uint8_t fillType) {
     // Bresenham's Line Algorithm
-    int x = startX;
-    int y = startY;
-    int dx = abs(endX - startX);
-    int dy = abs(endY - startY);
-    int sx = (startX < endX) ? 1 : -1;
-    int sy = (startY < endY) ? 1 : -1;
-    int err = dx - dy;
+    int dx = abs(x2 - x1);
+    int sx = (x1 < x2) ? 1 : -1;
+    int dy = abs(y2 - y1);
+    dy = -dy;
+    int sy = (y1 < y2) ? 1 : -1;
+    int err = dx + dy;
 
     while (true) {
-        if (x >= 0 && x < width && y >= 0 && y < height) {
-            setCell(x, y, FREE_SPACE);
+        if (getCell(x1, y1) != ROBOT_LOCATION || getCell(x1, y1) != SEEN_LOCATION) {
+            setCell(x1, y1, fillType);
         }
-        if (x == endX && y == endY)
+        if ((x1 == x2) && (y1 == y2))
             break;
-        int e2 = 2 * err;
-        if (e2 > -dy) {
-            err -= dy;
-            x += sx;
+        int e2 = err << 1;
+        if (e2 >= dy) {
+            if (x1 == x2)
+                break;
+            err += dy;
+            x1 += sx;
         }
-        if (e2 < dx) {
+        if (e2 <= dx) {
+            if (y1 == y2)
+                break;
             err += dx;
-            y += sy;
+            y1 += sy;
         }
     }
 }

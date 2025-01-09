@@ -44,7 +44,9 @@ private:
     int robotY;
     int robotAngle; // Angle in degrees (0 - 359)
     void initGrid();
-    void markPath(int x0, int y0, int x1, int y1);
+    void markPath(int x0, int y0, int x1, int y1, uint8_t type);
+
+    float dLF_prev, dLB_prev, dRF_prev, dRB_prev, dF_prev, dB_prev = 0;
 
     /*
      * Sensor locations relative to the center of the robot
