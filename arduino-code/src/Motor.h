@@ -22,6 +22,9 @@ public:
 
     void setup();
 
+    updateMotorA(int direction, float speed);
+    updateMotorB(int direction, float speed);
+
     /**
      * @brief Update the direction and speed of both motors simultaneously
      *
@@ -74,6 +77,10 @@ public:
 
     float calculateSpeedB();
 
+    long int encoderCountA;
+    long int encoderCountB;
+    float speed_difference_fix = 1.04f;
+
 private:
     mbed::DigitalOut motorADir; // Digital pin for motor A direction control
     mbed::DigitalOut motorBDir; // Digital pin for motor B direction control
@@ -85,8 +92,8 @@ private:
 
     long int shaftRevA;
     long int shaftRevB;
-    long int encoderCountA;
-    long int encoderCountB;
+    // long int encoderCountA;
+    // long int encoderCountB;
     volatile int lastEncoderCountA = 0;
     volatile int lastEncoderCountB = 0;
 

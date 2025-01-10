@@ -29,6 +29,9 @@ public:
     int getRobotX();
     int getRobotY();
     int getRobotAngle();
+    bool isLeftBlocked();
+    bool isRightBlocked();
+    bool isFrontBlocked();
 
     std::pair<int, int> calculateGlobalPosition(float offsetX, float offsetY, float distance, float sensorAngle);
     void updateGridWithSensor(float sensorX, float sensorY, float distance, float sensorAngle);
@@ -47,6 +50,11 @@ private:
     void markPath(int x0, int y0, int x1, int y1, uint8_t type);
 
     float dLF_prev, dLB_prev, dRF_prev, dRB_prev, dF_prev, dB_prev = 0;
+    std::pair<int, int> dLF_prev_position, dLB_prev_position, dRF_prev_position, dRB_prev_position, dF_prev_position, dB_prev_position = std::make_pair(0, 0);
+    bool leftBlocked = false;
+    bool rightBlocked = false;
+    bool frontBlocked = false;
+    const int BLOCKED_MARGAIN = 5;
 
     /*
      * Sensor locations relative to the center of the robot

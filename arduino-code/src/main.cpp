@@ -26,7 +26,7 @@ GPY0E02B irBus;
 Motor motor(P0_4, P0_5, P0_27, P1_2);
 
 // Declarning Threads
-rtos::Thread motorSyncThread;
+rtos::Thread syncMotorsThread;
 rtos::Thread updateThread;
 
 // Initialise map
@@ -273,7 +273,29 @@ void mapUpdate() {
     float dRB = irBus.measureDistanceCm();
 
     mapInstance.updateGrid(dLF, dLB, dRF, dRB, dF, dB);
-    mapInstance.printGrid();
+}
+
+void syncMotors() {
+    Serial.println("SYNCING");
+    motor.resetCount();
+    float encoder_difference_multiplier1;
+    float encoder_difference_multiplier2;
+    float circumference = 13.8 * PI;
+    motor.updateMotors(1, 1, 0.5f, 0.5f);
+    while ((fabs(motor.calculateDistanceA()) + fabs(motor.calculateDistanceB())) * 0.5 < circumference) {
+        encoder_difference_multiplier1 = fabs((float)motor.encoderCountA) / fabs((float)motor.encoderCountB);
+        Serial.println(encoder_difference_multiplier1);
+    }
+    motor.stopMotors();
+    motor.resetCount();
+    motor.updateMotors(0, 0, 0.5f, 0.5f);
+    while ((fabs(motor.calculateDistanceA()) + fabs(motor.calculateDistanceB())) * 0.5 < circumference) {
+        encoder_difference_multiplier2 = fabs((float)motor.encoderCountA) / fabs((float)motor.encoderCountB);
+        Serial.println(encoder_difference_multiplier2);
+    }
+    motor.stopMotors();
+    motor.speed_difference_fix = encoder_difference_multiplier1;
+    motor.resetCount();
 }
 
 void setup() {
@@ -285,25 +307,35 @@ void setup() {
 
     motor.setup();
     motor.startCounting();
-    // motorSyncThread.start(mbed::callback(&motor, &Motor::syncMotors));
 
     thread_sleep_for(1000);
     float dB = us2.measureDistanceCm();
     irBus.selectBus(3);
     float dRB = irBus.measureDistanceCm();
     updateThread.start(update);
+
     mapInstance.identifyStartPosition(dB, dRB);
 
     Serial.println("Setup complete");
 
     thread_sleep_for(1000);
-
-    enqueueAction(TURNING_LEFT, 90, 0.5f);
 }
 
 void loop() {
-    enqueueAction(MOVING_FORWARD, 50, 0.7f);
-    thread_sleep_for(5000);
     mapUpdate();
-    thread_sleep_for(5000);
+    if (actionQueue.empty()) {
+        if (mapInstance.isFrontBlocked()) {
+            if (mapInstance.isLeftBlocked() && !mapInstance.isRightBlocked()) {
+                enqueueAction(TURNING_RIGHT, 90, 0.5f);
+            } else if (!mapInstance.isLeftBlocked() && mapInstance.isRightBlocked()) {
+                enqueueAction(TURNING_LEFT, 90, 0.5f);
+            } else {
+                enqueueAction(TURNING_LEFT, 180, 0.5f);
+            }
+        } else if (!mapInstance.isLeftBlocked()) {
+            enqueueAction(MOVING_FORWARD, 6, 0.5f);
+            enqueueAction(TURNING_LEFT, 90, 0.5f);
+        }
+        enqueueAction(MOVING_FORWARD, 2, 0.5f);
+    }
 }

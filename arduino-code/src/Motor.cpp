@@ -19,6 +19,22 @@ void Motor::setup() {
     Serial.println("Motor B PWM period set to 1 ms");
 }
 
+void Motor::updateMotorA(int direction, float speed) {
+    mutex.lock();
+    motorADir = direction;
+    motorASpeed = speed;
+    motorAPWM.write(speed);
+    mutex.unlock();
+}
+
+void Motor::updateMotorB(int direction, float speed) {
+    mutex.lock();
+    motorBDir = direction;
+    motorBSpeed = speed;
+    motorBPWM.write(speed);
+    mutex.unlock();
+}
+
 void Motor::updateMotors(int directionA, int directionB, float speedA,
                          float speedB) {
     mutex.lock();
@@ -40,7 +56,14 @@ void Motor::updateMotors(float speedA, float speedB) {
 
 void Motor::syncMotors() {
     int diff = abs(encoderA - encoderB);
-    // currently non-functional
+    if (encoderA > encoderB) {
+        stopMotorA();
+        while (encoderA > encoderB)
+            ;
+        updateMotor
+    } else if (encoderA < encoderB) {
+        stopMotorB();
+    }
 }
 
 void Motor::stopMotorA() {
