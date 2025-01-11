@@ -58,11 +58,17 @@ void Motor::syncMotors() {
     int diff = abs(encoderA - encoderB);
     if (encoderA > encoderB) {
         stopMotorA();
-        while (encoderA > encoderB)
-            ;
-        updateMotor
+        while (encoderA > encoderB) {
+            // do nothing
+        }
+        updateMotorA(motorADir, motorASpeed);
+
     } else if (encoderA < encoderB) {
         stopMotorB();
+        while (encoderA < encoderB) {
+            // do nothing
+        }
+        updateMotorB(motorBDir, motorBSpeed);
     }
 }
 

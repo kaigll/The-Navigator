@@ -33,3 +33,25 @@ float GPY0E02B::measureDistanceCm() {
     mutex.unlock();
     return distance;
 }
+
+float GPY0E02B::measureDistanceCm(int bus) {
+    mutex.lock();
+    // select the specified i2c bus
+    const char mux_cmd = 1 << bus;
+    const char mux_addr = 0xEE;
+    i2c.write(mux_addr, &mux_cmd, 1);
+
+    char cmd = 0x5E; // Register address from the task
+    char data[2];
+    byte sensorAddress = 0x80;
+
+        i2c.write(sensorAddress, &cmd, 1);
+    wait_us(500); // Provided delay
+    i2c.read(sensorAddress, data, 2);
+
+    uint16_t combinedData = (data[0] << 4) | data[1];
+    float distance = static_cast<float>(combinedData) / 64.0;
+
+    mutex.unlock();
+    return distance;
+}

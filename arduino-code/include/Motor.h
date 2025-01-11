@@ -20,10 +20,26 @@ public:
     Motor(PinName motorADir, PinName motorBDir, PinName motorAPWM,
           PinName motorBPWM);
 
+    /**
+     * @brief Setup PWM for motor A and motor B
+     */
     void setup();
 
-    updateMotorA(int direction, float speed);
-    updateMotorB(int direction, float speed);
+    /**
+     * @brief Update the direction and speed of motor A
+     *
+     * @param direction Direction for motor (e.g., 1 or 0)
+     * @param speed Speed for motor (0.0f to 1.0f)
+     */
+    void updateMotorA(int direction, float speed);
+
+    /**
+     * @brief Update the direction and speed of motor B
+     *
+     * @param direction Direction for motor (e.g., 1 or 0)
+     * @param speed Speed for motor (0.0f to 1.0f)
+     */
+    void updateMotorB(int direction, float speed);
 
     /**
      * @brief Update the direction and speed of both motors simultaneously
@@ -44,6 +60,9 @@ public:
      */
     void updateMotors(float speedA, float speedB);
 
+    /**
+     * @brief Synchronise the motors by pausing movement if one motor is detected to be going faster than the other
+     */
     void syncMotors();
 
     /**
@@ -77,8 +96,8 @@ public:
 
     float calculateSpeedB();
 
-    long int encoderCountA;
-    long int encoderCountB;
+    long int encoderCountA; // The encoder count for motor A
+    long int encoderCountB; // The encoder count for motor B
     float speed_difference_fix = 1.04f;
 
 private:
@@ -87,8 +106,8 @@ private:
     mbed::PwmOut motorAPWM;     // PWM pin for motor A speed control
     mbed::PwmOut motorBPWM;     // PWM pin for motor B speed control
     rtos::Mutex mutex;          // Mutex to prevent simultaneous calls
-    float motorASpeed;
-    float motorBSpeed;
+    float motorASpeed;          // Stores the current speed of motor A
+    float motorBSpeed;          // Stores the current speed of motor B
 
     long int shaftRevA;
     long int shaftRevB;
@@ -97,9 +116,9 @@ private:
     volatile int lastEncoderCountA = 0;
     volatile int lastEncoderCountB = 0;
 
-    const float wheelDiameter = 4.7;
-    const float wheelCircumference = wheelDiameter * PI; //~14.7654854719;
-    const int pulsesPerRevolution = 330;
+    const float wheelDiameter = 4.7;                     // Wheel diameter in cm
+    const float wheelCircumference = wheelDiameter * PI; // 4.7 * pi =~ 14.7654854719;
+    const int pulsesPerRevolution = 330;                 // The number of pulses from the encoder per full wheel revolution
 
     mbed::Timer timer;
 };

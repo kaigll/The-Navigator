@@ -26,6 +26,14 @@ public:
      */
     float measureDistanceCm();
 
+    /**
+     * Measure the distance by triggering the sensor and reading the returned
+     * echo.
+     * @param bus The bus number to select (0-3).
+     * @returns Distance in centimeters, or -1 if an error occurs.
+     */
+    float measureDistanceCm(int bus);
+
 private:
     byte _address;
     rtos::Mutex mutex; // Mutex to avoid simultaneous calls

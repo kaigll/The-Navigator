@@ -95,7 +95,7 @@ std::pair<int, int> Map::calculateGlobalPosition(float offsetX, float offsetY, f
     float translatedY = (offsetY * sin(DEG_TO_RAD * robotAngle)) + (distance * sin(DEG_TO_RAD * combinedAngle)); // Calculate Y translation
     int globalX = static_cast<int>((robotX + translatedX) / cellSize);                                           // Convert to grid cell
     int globalY = static_cast<int>((robotY + translatedY) / cellSize);                                           // Convert to grid cell
-    //Serial.println((String)globalX + ", " + globalY);
+    // Serial.println((String)globalX + ", " + globalY);
 
     return std::make_pair(globalX, globalY);
 }
@@ -119,13 +119,18 @@ void Map::updateGrid(float dLF, float dLB, float dRF, float dRB, float dF, float
     std::pair<int, int> dRF_position = calculateGlobalPosition(sensorRF_X, sensorRF_Y, dRF, 90);
     std::pair<int, int> dRB_position = calculateGlobalPosition(sensorRB_X, sensorRB_Y, dRB, 90);
 
-    
-    if (dLF_prev = 0) dLF_prev = dLF;
-    if (dLB_prev = 0) dLB_prev = dLB;
-    if (dRF_prev = 0) dRF_prev = dRF;
-    if (dRB_prev = 0) dRB_prev = dRB;
-    if (dF_prev = 0) dF_prev = dF;
-    if (dB_prev = 0) dB_prev = dB;
+    if (dLF_prev = 0)
+        dLF_prev = dLF;
+    if (dLB_prev = 0)
+        dLB_prev = dLB;
+    if (dRF_prev = 0)
+        dRF_prev = dRF;
+    if (dRB_prev = 0)
+        dRB_prev = dRB;
+    if (dF_prev = 0)
+        dF_prev = dF;
+    if (dB_prev = 0)
+        dB_prev = dB;
 
     // check with a margain of error the difference between current and previous messurements to connect what is predicted to be continuous walls
     float errorForWall = 2;
@@ -165,7 +170,7 @@ void Map::updateGrid(float dLF, float dLB, float dRF, float dRB, float dF, float
     dF_prev = dF;
     dB_prev = dB;
     dF_prev_position = dF_position;
-    //dB_prev_position = dB_position;
+    // dB_prev_position = dB_position;
     dLF_prev_position = dLF_position;
     dLB_prev_position = dLB_position;
     dRF_prev_position = dRF_position;

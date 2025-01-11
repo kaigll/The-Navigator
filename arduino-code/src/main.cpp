@@ -4,10 +4,8 @@
 
 #include <GPY0E02B.h>
 #include <HCSR04.h>
-#include <Motor.h>
-
-#include <Coordinate.h>
 #include <Map.h>
+#include <Motor.h>
 #include <queue>
 
 // US 1 Front
@@ -95,83 +93,38 @@ void moveForward(float distance, float speed) {
     motor.updateMotors(0, 1, speed, speed);
 }
 
-void alignLeft(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
-    float speed = 0.0f;
-    while (frontDistance > backDistance) {
-        motor.updateMotors(1, 1, speed, speed); // turn left
-        speed += 0.01f;
-        irBus.selectBus(frontBus);
-        frontDistance = irBus.measureDistanceCm();
-        irBus.selectBus(backBus);
-        backDistance = irBus.measureDistanceCm();
-        if (fabs(frontDistance - backDistance) < errorLimit) {
+void alignLeft() {
+    float const ERROR = 0.3;
+
+    while (irBus.measureDistanceCm(0) != irBus.measureDistanceCm(1)) {
+        float dLF = irBus.measureDistanceCm(0);
+        float dLB = irBus.measureDistanceCm(1);
+        if (dLF == dLB) {
             break;
         }
-        thread_sleep_for(50);
+        if (dLF > dLB + ERROR) {
+            turnLeft(1, 0.3f);
+        } else if (dLB > dLF + ERROR) {
+            turnRight(1, 0.3f);
+        }
     }
+
     motor.stopMotors();
-    thread_sleep_for(10);
 }
 
-void alignRight(float &frontDistance, float &backDistance, int frontBus, int backBus, float errorLimit) {
-    float speed = 0.0f;
-    while (frontDistance < backDistance) {
-        motor.updateMotors(0, 0, speed, speed); // turn right
-        speed += 0.01f;
-        irBus.selectBus(frontBus);
-        frontDistance = irBus.measureDistanceCm();
-        irBus.selectBus(backBus);
-        backDistance = irBus.measureDistanceCm();
-        if (fabs(frontDistance - backDistance) < errorLimit) {
+void alignRight() {
+    float const ERROR = 0.3; // as the IRsensors will have natural variance between eachother this constant represents how much they can differ and still be accepted as "aligned"
+
+    while (irBus.measureDistanceCm(2) != irBus.measureDistanceCm(3)) {
+        float dRF = irBus.measureDistanceCm(2);
+        float dRB = irBus.measureDistanceCm(3);
+        if (dRF == dRB) {
             break;
         }
-        thread_sleep_for(50);
-    }
-    motor.stopMotors();
-    thread_sleep_for(10);
-}
-
-void straighten() {
-    irBus.selectBus(0);
-    float dLF = irBus.measureDistanceCm();
-    irBus.selectBus(1);
-    float dLB = irBus.measureDistanceCm();
-    irBus.selectBus(2);
-    float dRF = irBus.measureDistanceCm();
-    irBus.selectBus(3);
-    float dRB = irBus.measureDistanceCm();
-
-    // if no walls within limits
-    float wallLimit = 15.0f;
-    float errorLimit = 0.1f;
-    if (dLF > wallLimit && dLB > wallLimit && dRF > wallLimit && dRB > wallLimit) {
-        Serial.println("failed to detect wall");
-        return;
-    }
-
-    // if right is closer to wall
-    if ((dLF + dLB) < (dRF + dRB)) {
-        if (fabs(dLF - dLB) < errorLimit) {
-            return;
-        }
-        if (dLF < dLB) {
-            Serial.println("Aligning right to follow the left wall");
-            alignRight(dLF, dLB, 0, 1, errorLimit);
-        } else if (dLF > dLB) {
-            Serial.println("Aligning left to follow the left wall");
-            alignLeft(dLF, dLB, 0, 1, errorLimit);
-        }
-        // if left is closer to wall
-    } else if ((dLF + dLB) > (dRF + dRB)) {
-        if (fabs(dRF - dRB) < errorLimit) {
-            return;
-        }
-        if (dRF < dRB) {
-            Serial.println("Aligning left to follow the right wall");
-            alignLeft(dRF, dRB, 2, 3, errorLimit);
-        } else if (dRF > dRB) {
-            Serial.println("Aligning right to follow the right wall");
-            alignRight(dRF, dRB, 2, 3, errorLimit);
+        if (dRF > dRB + ERROR) {
+            turnRight(1, 0.3f);
+        } else if (dRB > dRF + ERROR) {
+            turnLeft(1, 0.3f);
         }
     }
 }
@@ -212,7 +165,7 @@ void update() {
             }
             break;
         case STRAIGHTEN:
-            straighten(); // eventually unpack this for simplicity
+
         case IDLE:
         default:
             if (!actionQueue.empty()) {
@@ -239,38 +192,13 @@ void update() {
     }
 }
 
-void wallDetect() {
-    float dF = us1.measureDistanceCm();
-    if (dF < 5) {
-        irBus.selectBus(0);
-        float dLF = irBus.measureDistanceCm();
-        irBus.selectBus(2);
-        float dRF = irBus.measureDistanceCm();
-        if (dRF < dLF && actionQueue.front().state != TURNING_RIGHT) {
-            for (int i = 0; i < actionQueue.size(); i++)
-                actionQueue.pop();
-            enqueueAction(TURNING_RIGHT, 90, 0.5f);
-        } else if (actionQueue.front().state != TURNING_LEFT) {
-            for (int i = 0; i < actionQueue.size(); i++)
-                actionQueue.pop();
-            enqueueAction(TURNING_LEFT, 90, 0.5f);
-        }
-    } else if (actionQueue.front().state != MOVING_FORWARD) {
-        enqueueAction(MOVING_FORWARD, 5, 0.5f);
-    }
-}
-
 void mapUpdate() {
     float dF = us1.measureDistanceCm();
     float dB = us2.measureDistanceCm();
-    irBus.selectBus(0);
-    float dLF = irBus.measureDistanceCm();
-    irBus.selectBus(1);
-    float dLB = irBus.measureDistanceCm();
-    irBus.selectBus(2);
-    float dRF = irBus.measureDistanceCm();
-    irBus.selectBus(3);
-    float dRB = irBus.measureDistanceCm();
+    float dLF = irBus.measureDistanceCm(0);
+    float dLB = irBus.measureDistanceCm(1);
+    float dRF = irBus.measureDistanceCm(2);
+    float dRB = irBus.measureDistanceCm(3);
 
     mapInstance.updateGrid(dLF, dLB, dRF, dRB, dF, dB);
 }
@@ -310,11 +238,10 @@ void setup() {
 
     thread_sleep_for(1000);
     float dB = us2.measureDistanceCm();
-    irBus.selectBus(3);
-    float dRB = irBus.measureDistanceCm();
-    updateThread.start(update);
-
+    float dRB = irBus.measureDistanceCm(3);
     mapInstance.identifyStartPosition(dB, dRB);
+
+    updateThread.start(update);
 
     Serial.println("Setup complete");
 

@@ -4,8 +4,10 @@
 
   Source: https://github.com/Martinsos/arduino-lib-hc-sr04
 
-  Modified by Kai Gledhill-Lawson to accmomodate for a bridged trigger and echo
-  pin
+  Modified by Kai Gledhill-Lawson:
+  - accmomodated for a bridged trigger and echo pin
+  - small improvements to prevent blocking
+  - added mutex preventing simultaneous calls
 */
 
 #ifndef HCSR04_H
