@@ -7,9 +7,9 @@
 // Initialize I2C
 mbed::I2C i2c(P0_31, P0_2);
 
-GPY0E02B::GPY0E02B() {}
+IRSensor::IRSensor() {}
 
-void GPY0E02B::selectBus(int bus) {
+void IRSensor::selectBus(int bus) {
     mutex.lock();
     const char mux_cmd = 1 << bus;
     const char mux_addr = 0xEE;
@@ -17,7 +17,7 @@ void GPY0E02B::selectBus(int bus) {
     mutex.unlock();
 }
 
-float GPY0E02B::measureDistanceCm() {
+float IRSensor::measureDistanceCm() {
     mutex.lock();
     char cmd = 0x5E; // Register address from the task
     char data[2];
@@ -34,10 +34,9 @@ float GPY0E02B::measureDistanceCm() {
     return distance;
 }
 
-float GPY0E02B::measureDistanceCm(int bus) {
+float IRSensor::measureDistanceCm(int bus) {
     mutex.lock();
-    // select the specified i2c bus
-    const char mux_cmd = 1 << bus;
+    const char mux_cmd = 1 << bus; // select the specified i2c bus
     const char mux_addr = 0xEE;
     i2c.write(mux_addr, &mux_cmd, 1);
 
@@ -45,7 +44,7 @@ float GPY0E02B::measureDistanceCm(int bus) {
     char data[2];
     byte sensorAddress = 0x80;
 
-        i2c.write(sensorAddress, &cmd, 1);
+    i2c.write(sensorAddress, &cmd, 1);
     wait_us(500); // Provided delay
     i2c.read(sensorAddress, data, 2);
 

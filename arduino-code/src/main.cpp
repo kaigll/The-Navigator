@@ -8,28 +8,28 @@
 #include <Motor.h>
 #include <queue>
 
-// US 1 Front
-UltraSonicDistanceSensor us1(7);
-// US 2 Back
-UltraSonicDistanceSensor us2(6);
+UltraSonicDistanceSensor us1(7); // Ultrasonic sensor 1, located on the front
+UltraSonicDistanceSensor us2(6); // Ultrasonic sensor 2, located on the back
 
-// ir 0 Left Front
-// ir 1 Left Back
-// ir 2 Right Front
-// ir 3 Right Back
-GPY0E02B irBus;
+/*
+ * IR 0 - left front sensor
+ * IR 1 - left back sensor
+ * IR 2 - right front sensor
+ * IR 3 - right back sensor
+ **/
+IRSensor irBus;
 
-// Motor A is the Left
-// Motor B is the Right
+/**
+ * Motor A is the left side wheel
+ * Motor B is the right side wheel
+ */
 Motor motor(P0_4, P0_5, P0_27, P1_2);
 
 // Declarning Threads
 rtos::Thread syncMotorsThread;
 rtos::Thread updateThread;
 
-// Initialise map
-// Map mapInstance(29, 40, 5); // maze is roughly 145cm x 200cm
-Map mapInstance(150, 200, 1);
+Map mapInstance(150, 200, 1); // Initialise map
 
 // Define all possible states
 enum RobotState {
@@ -37,7 +37,7 @@ enum RobotState {
     TURNING_LEFT,
     TURNING_RIGHT,
     MOVING_FORWARD,
-    STRAIGHTEN
+    ALIGN
 };
 
 RobotState robotState = IDLE;
@@ -46,12 +46,13 @@ float currentDistance;
 
 // Define an action struct to allow for movement planning
 struct Action {
-    RobotState state;
-    float value; // for turning: angle, for moving: distance
-    float speed;
+    RobotState state; // The type of action to perform
+    float value;      // For turning this is the angle. For moving this is the distance
+    float speed;      // Speed to perform action at, range 0.0f -> 1.0f
 };
 
-std::queue<Action> actionQueue;
+std::queue<Action> actionQueue; // Queue of actions to be performed sequentially.
+bool useActionQueue = true;     // boolean to pause following the action queue, used for multi-step action routines (e.g. alignLeft, alignRight)
 
 void enqueueAction(RobotState state, float value, float speed) {
     actionQueue.push({state, value, speed});
@@ -94,81 +95,100 @@ void moveForward(float distance, float speed) {
 }
 
 void alignLeft() {
-    float const ERROR = 0.3;
+    useActionQueue = false;  // Pause queued actions
+    const float ERROR = 0.3; // Provide a margain of error to allow, accounting for sensor varience
+    float distanceLeftFront = irBus.measureDistanceCm(0);
+    float distanceLeftBack = irBus.measureDistanceCm(1);
 
-    while (irBus.measureDistanceCm(0) != irBus.measureDistanceCm(1)) {
-        float dLF = irBus.measureDistanceCm(0);
-        float dLB = irBus.measureDistanceCm(1);
-        if (dLF == dLB) {
+    while (distanceLeftFront != distanceLeftBack) {
+        distanceLeftFront = irBus.measureDistanceCm(0);
+        distanceLeftBack = irBus.measureDistanceCm(1);
+        if (distanceLeftFront == distanceLeftBack) {
             break;
         }
-        if (dLF > dLB + ERROR) {
-            turnLeft(1, 0.3f);
-        } else if (dLB > dLF + ERROR) {
-            turnRight(1, 0.3f);
+        if (distanceLeftFront > distanceLeftBack + ERROR) {
+            turnLeft(1, 0.25f); // correct for left front being too far away
+        } else if (distanceLeftBack > distanceLeftFront + ERROR) {
+            turnRight(1, 0.25f); // correct for left back being too far away
+        }
+        while (robotState == TURNING_LEFT || robotState == TURNING_RIGHT) {
+            // wait for move to finish
+            thread_sleep_for(1);
         }
     }
-
-    motor.stopMotors();
+    Serial.println("Alignment complete. Now aligned to left side wall");
+    useActionQueue = true; // Resume queued actions
 }
 
 void alignRight() {
-    float const ERROR = 0.3; // as the IRsensors will have natural variance between eachother this constant represents how much they can differ and still be accepted as "aligned"
+    useActionQueue = false;  // Pause queued actions
+    const float ERROR = 0.3; // Provide a margain of error to allow, accounting for sensor varience
+    float distanceRightFront = irBus.measureDistanceCm(2);
+    float distanceRightBack = irBus.measureDistanceCm(3);
 
-    while (irBus.measureDistanceCm(2) != irBus.measureDistanceCm(3)) {
-        float dRF = irBus.measureDistanceCm(2);
-        float dRB = irBus.measureDistanceCm(3);
-        if (dRF == dRB) {
+    while (distanceRightFront != distanceRightBack) {
+        distanceRightFront = irBus.measureDistanceCm(2);
+        distanceRightBack = irBus.measureDistanceCm(3);
+        if (distanceRightFront == distanceRightBack) {
             break;
         }
-        if (dRF > dRB + ERROR) {
-            turnRight(1, 0.3f);
-        } else if (dRB > dRF + ERROR) {
-            turnLeft(1, 0.3f);
+        if (distanceRightFront > distanceRightBack + ERROR) {
+            turnRight(1, 0.25f); // correct for right front being too far away
+        } else if (distanceRightBack > distanceRightFront + ERROR) {
+            turnLeft(1, 0.25f); // correct for right back being too far away
+        }
+        while (robotState == TURNING_LEFT || robotState == TURNING_RIGHT) {
+            // wait for move to finish
+            thread_sleep_for(1);
         }
     }
+    Serial.println("Alignment complete. Now aligned to right side wall");
+    useActionQueue = true; // Resume queued actions
 }
 
 /**
- * The main movement controlling thread is within this function,
- * this is simply a state machine for the current state, and will
- * follow the current queue of moves assigned to the robot.
+ * @brief Controls the state machine responsible for movement.
+ * Intended to run within a thread as this runs a continuous loop.
  */
 void update() {
     while (true) {
-        float distA = motor.calculateDistanceA();
-        float distB = motor.calculateDistanceB();
+        // update encoder distance measurements
+        float distanceMotorA = motor.calculateDistanceA();
+        float distanceMotorB = motor.calculateDistanceB();
 
         switch (robotState) {
-        case TURNING_LEFT:
+        case TURNING_LEFT: // Fall-through due to both having identical logic
         case TURNING_RIGHT:
-            currentDistance = (abs(distA) + abs(distB)) / 2;
-
+            currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
             if (currentDistance >= targetDistance) {
                 motor.stopMotors();
                 thread_sleep_for(10);
                 motor.resetCount();
                 Serial.println("Turn complete.");
                 robotState = IDLE;
+            } else {
+                motor.syncMotors();
             }
             break;
 
         case MOVING_FORWARD:
-            currentDistance = (abs(distA) + abs(distB)) / 2;
-
+            currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
             if (currentDistance >= targetDistance) {
                 motor.stopMotors();
                 thread_sleep_for(10);
                 motor.resetCount();
                 Serial.println("Move complete.");
                 robotState = IDLE;
+            } else {
+                motor.syncMotors();
             }
             break;
-        case STRAIGHTEN:
+
+        case ALIGN:
 
         case IDLE:
         default:
-            if (!actionQueue.empty()) {
+            if (!actionQueue.empty() && useActionQueue) {
                 Action action = actionQueue.front();
                 actionQueue.pop();
 
@@ -185,47 +205,29 @@ void update() {
                 default:
                     break;
                 }
-                // Do nothing when no actions are queued
             }
-            thread_sleep_for(10);
+            // Do nothing when no actions are queued
         }
+        thread_sleep_for(10); // short delay before looping
     }
 }
 
+/**
+ * @brief Check all sensors, and update map based upon values
+ */
 void mapUpdate() {
-    float dF = us1.measureDistanceCm();
-    float dB = us2.measureDistanceCm();
-    float dLF = irBus.measureDistanceCm(0);
-    float dLB = irBus.measureDistanceCm(1);
-    float dRF = irBus.measureDistanceCm(2);
-    float dRB = irBus.measureDistanceCm(3);
-
-    mapInstance.updateGrid(dLF, dLB, dRF, dRB, dF, dB);
+    float distanceFront = us1.measureDistanceCm();
+    float distanceBack = us2.measureDistanceCm();
+    float distanceLeftFront = irBus.measureDistanceCm(0);
+    float distanceLeftBack = irBus.measureDistanceCm(1);
+    float distanceRightFront = irBus.measureDistanceCm(2);
+    float distanceRightBack = irBus.measureDistanceCm(3);
+    mapInstance.updateGrid(distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack, distanceFront, distanceBack);
 }
 
-void syncMotors() {
-    Serial.println("SYNCING");
-    motor.resetCount();
-    float encoder_difference_multiplier1;
-    float encoder_difference_multiplier2;
-    float circumference = 13.8 * PI;
-    motor.updateMotors(1, 1, 0.5f, 0.5f);
-    while ((fabs(motor.calculateDistanceA()) + fabs(motor.calculateDistanceB())) * 0.5 < circumference) {
-        encoder_difference_multiplier1 = fabs((float)motor.encoderCountA) / fabs((float)motor.encoderCountB);
-        Serial.println(encoder_difference_multiplier1);
-    }
-    motor.stopMotors();
-    motor.resetCount();
-    motor.updateMotors(0, 0, 0.5f, 0.5f);
-    while ((fabs(motor.calculateDistanceA()) + fabs(motor.calculateDistanceB())) * 0.5 < circumference) {
-        encoder_difference_multiplier2 = fabs((float)motor.encoderCountA) / fabs((float)motor.encoderCountB);
-        Serial.println(encoder_difference_multiplier2);
-    }
-    motor.stopMotors();
-    motor.speed_difference_fix = encoder_difference_multiplier1;
-    motor.resetCount();
-}
-
+/**
+ * @brief Built in arduino setup function
+ */
 void setup() {
     Serial.begin(9600);
 
@@ -237,9 +239,9 @@ void setup() {
     motor.startCounting();
 
     thread_sleep_for(1000);
-    float dB = us2.measureDistanceCm();
-    float dRB = irBus.measureDistanceCm(3);
-    mapInstance.identifyStartPosition(dB, dRB);
+    float distanceBack = us2.measureDistanceCm();
+    float distanceRightBack = irBus.measureDistanceCm(3);
+    mapInstance.identifyStartPosition(distanceBack, distanceRightBack);
 
     updateThread.start(update);
 
@@ -248,8 +250,11 @@ void setup() {
     thread_sleep_for(1000);
 }
 
+/**
+ * @brief Built in arduino loop function
+ */
 void loop() {
-    mapUpdate();
+    /*mapUpdate();
     if (actionQueue.empty()) {
         if (mapInstance.isFrontBlocked()) {
             if (mapInstance.isLeftBlocked() && !mapInstance.isRightBlocked()) {
@@ -264,5 +269,8 @@ void loop() {
             enqueueAction(TURNING_LEFT, 90, 0.5f);
         }
         enqueueAction(MOVING_FORWARD, 2, 0.5f);
-    }
+    }*/
+    mapInstance.setRobotPosition(50, mapInstance.getRobotY()+5, 180);
+    Serial.println(mapInstance.isRobotAtFinish());
+    thread_sleep_for(100);
 }

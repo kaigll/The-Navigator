@@ -55,18 +55,20 @@ void Motor::updateMotors(float speedA, float speedB) {
 }
 
 void Motor::syncMotors() {
-    int diff = abs(encoderA - encoderB);
-    if (encoderA > encoderB) {
+    // if motor A is faster than motor B, stop motor A until distance has equalized
+    // else if motor B is faster than motor A, stop motor B until distance has equalized
+    if (abs(encoderCountA) > abs(encoderCountB)) {
         stopMotorA();
-        while (encoderA > encoderB) {
-            // do nothing
+        while (abs(encoderCountA) > abs(encoderCountB)) {
+            // do nothing until motor B catches up
+            thread_sleep_for(1);
         }
         updateMotorA(motorADir, motorASpeed);
-
-    } else if (encoderA < encoderB) {
+    } else if (abs(encoderCountA) < abs(encoderCountB)) {
         stopMotorB();
-        while (encoderA < encoderB) {
-            // do nothing
+        while (abs(encoderCountA) < abs(encoderCountB)) {
+            // do nothing until motor A catches up
+            thread_sleep_for(1);
         }
         updateMotorB(motorBDir, motorBSpeed);
     }
@@ -86,7 +88,7 @@ void Motor::stopMotors() {
 }
 
 void Motor::startCounting() {
-    timer.start();
+    //timer.start();
     encoderA.rise(mbed::callback(this, &Motor::countPulseA));
     encoderB.rise(mbed::callback(this, &Motor::countPulseB));
 }

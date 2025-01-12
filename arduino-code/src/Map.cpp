@@ -13,12 +13,12 @@ void Map::initGrid() {
     grid = new uint8_t[height * byteWidth]();
 }
 
-void Map::setCell(int x, int y, uint8_t value) {
+void Map::setCell(int x, int y, uint8_t state) {
     int index = (y * (width + 1) / 2) + (x / 2);
     if (x % 2 == 0) {
-        grid[index] = (grid[index] & 0xF0) | (value & 0x0F); // Set lower 4 bits
+        grid[index] = (grid[index] & 0xF0) | (state & 0x0F); // Set lower 4 bits
     } else {
-        grid[index] = (grid[index] & 0x0F) | ((value & 0x0F) << 4); // Set upper 4 bits
+        grid[index] = (grid[index] & 0x0F) | ((state & 0x0F) << 4); // Set upper 4 bits
     }
 }
 
@@ -42,9 +42,9 @@ void Map::setRobotPosition(int x, int y, int angle) {
     setCell(robotX, robotY, ROBOT_LOCATION);
 }
 
-void Map::identifyStartPosition(float dB, float dRB) {
-    robotX = dRB + sensorRB_X;
-    robotY = dB - sensorB_Y;
+void Map::identifyStartPosition(float distanceBack, float distanceRightBack) {
+    robotX = distanceRightBack + sensorRightBack_X;
+    robotY = distanceBack - sensorBack_Y;
 
     setCell(robotX, robotY, ROBOT_LOCATION);
 }
@@ -111,51 +111,51 @@ void Map::updateGridWithSensor(float sensorX, float sensorY, float distance, flo
     }
 }
 
-void Map::updateGrid(float dLF, float dLB, float dRF, float dRB, float dF, float dB) {
-    std::pair<int, int> dF_position = calculateGlobalPosition(sensorF_X, sensorF_Y, dF, 0);
-    // std::pair<int, int> dB_position = calculateGlobalPosition(sensorB_X, sensorB_Y, dB, 180);
-    std::pair<int, int> dLF_position = calculateGlobalPosition(sensorLF_X, sensorLF_Y, dLF, 270);
-    std::pair<int, int> dLB_position = calculateGlobalPosition(sensorLB_X, sensorLB_Y, dLB, 270);
-    std::pair<int, int> dRF_position = calculateGlobalPosition(sensorRF_X, sensorRF_Y, dRF, 90);
-    std::pair<int, int> dRB_position = calculateGlobalPosition(sensorRB_X, sensorRB_Y, dRB, 90);
+void Map::updateGrid(float distanceLeftFront, float distanceLeftBack, float distanceRightFront, float distanceRightBack, float distanceFront, float distanceBack) {
+    std::pair<int, int> distanceFrontPosition = calculateGlobalPosition(sensorFront_X, sensorFront_Y, distanceFront, 0);
+    // std::pair<int, int> distanceBackPosition = calculateGlobalPosition(sensorBack_X, sensorB_Y, distanceBack, 180);
+    std::pair<int, int> distanceLeftFrontPosition = calculateGlobalPosition(sensorLeftFront_X, sensorLeftFront_Y, distanceLeftFront, 270);
+    std::pair<int, int> distanceLeftBackPosition = calculateGlobalPosition(sensorLeftBack_X, sensorLeftBack_Y, distanceLeftBack, 270);
+    std::pair<int, int> distanceRightFrontPosition = calculateGlobalPosition(sensorRightFront_X, sensorRightFront_Y, distanceRightFront, 90);
+    std::pair<int, int> distanceRightBackPosition = calculateGlobalPosition(sensorRightBack_X, sensorRightBack_Y, distanceRightBack, 90);
 
-    if (dLF_prev = 0)
-        dLF_prev = dLF;
-    if (dLB_prev = 0)
-        dLB_prev = dLB;
-    if (dRF_prev = 0)
-        dRF_prev = dRF;
-    if (dRB_prev = 0)
-        dRB_prev = dRB;
-    if (dF_prev = 0)
-        dF_prev = dF;
-    if (dB_prev = 0)
-        dB_prev = dB;
+    if (lastDistanceLeftFront = 0)
+        lastDistanceLeftFront = distanceLeftFront;
+    if (lastDistanceLeftBack = 0)
+        lastDistanceLeftBack = distanceLeftBack;
+    if (lastDistanceRightFront = 0)
+        lastDistanceRightFront = distanceRightFront;
+    if (lastDistanceRightBack = 0)
+        lastDistanceRightBack = distanceRightBack;
+    if (lastDistanceFront = 0)
+        lastDistanceFront = distanceFront;
+    if (lastDistanceBack = 0)
+        lastDistanceBack = distanceBack;
 
     // check with a margain of error the difference between current and previous messurements to connect what is predicted to be continuous walls
     float errorForWall = 2;
 
     // check average of 2 measurements to check for blockage
-    if (((dF + dF_prev) * 0.5) < BLOCKED_MARGAIN)
-        frontBlocked = true;
+    if (((distanceFront + lastDistanceFront) * 0.5) < BLOCKED_MARGAIN)
+        _isFrontBlocked = true;
     else
-        frontBlocked = false;
-    if (((dLF + dLF_prev) * 0.5) < BLOCKED_MARGAIN && ((dLB + dLB_prev) * 0.5) < BLOCKED_MARGAIN)
-        leftBlocked = true;
+        _isFrontBlocked = false;
+    if (((distanceLeftFront + lastDistanceLeftFront) * 0.5) < BLOCKED_MARGAIN && ((distanceLeftBack + lastDistanceLeftBack) * 0.5) < BLOCKED_MARGAIN)
+        _isLeftBlocked = true;
     else
-        leftBlocked = false;
-    if (((dRF + dRF_prev) * 0.5) < BLOCKED_MARGAIN && ((dRB + dRB_prev) * 0.5) < BLOCKED_MARGAIN)
-        rightBlocked = true;
+        _isLeftBlocked = false;
+    if (((distanceRightFront + lastDistanceRightFront) * 0.5) < BLOCKED_MARGAIN && ((distanceRightBack + lastDistanceRightBack) * 0.5) < BLOCKED_MARGAIN)
+        _isRightBlocked = true;
     else
-        rightBlocked = false;
+        _isRightBlocked = false;
 
     // check end of right side wall has not been reached
-    if (!(fabs(dLF_prev - dLF) > errorForWall && fabs(dLF - dLB) > errorForWall)) {
-        markPath(dLF_position.first, dLF_position.second, dLF_prev_position.first, dLF_prev_position.second, OBSTACLE);
+    if (!(fabs(lastDistanceLeftFront - distanceLeftFront) > errorForWall && fabs(distanceLeftFront - distanceLeftBack) > errorForWall)) {
+        markPath(distanceLeftFrontPosition.first, distanceLeftFrontPosition.second, lastDistanceLeftFrontPosition.first, lastDistanceLeftFrontPosition.second, OBSTACLE);
     }
     // check end of right side wall has not been reached
-    if (!(fabs(dRF_prev - dRF) > errorForWall && fabs(dRF - dRB) > errorForWall)) {
-        markPath(dRF_position.first, dRF_position.second, dRF_prev_position.first, dRF_prev_position.second, OBSTACLE);
+    if (!(fabs(lastDistanceRightFront - distanceRightFront) > errorForWall && fabs(distanceRightFront - distanceRightBack) > errorForWall)) {
+        markPath(distanceRightFrontPosition.first, distanceRightFrontPosition.second, lastDistanceRightFrontPosition.first, lastDistanceRightFrontPosition.second, OBSTACLE);
     }
     // if front > (significant) back then you know the wall ends
     // if back > (significant) front then you know new wall begins
@@ -163,25 +163,25 @@ void Map::updateGrid(float dLF, float dLB, float dRF, float dRB, float dF, float
     setCell(robotX, robotY, ROBOT_LOCATION); // Mark the robot's current location
 
     // store previous values for next cycle
-    dLF_prev = dLF;
-    dLB_prev = dLB;
-    dRF_prev = dRF;
-    dRB_prev = dRB;
-    dF_prev = dF;
-    dB_prev = dB;
-    dF_prev_position = dF_position;
-    // dB_prev_position = dB_position;
-    dLF_prev_position = dLF_position;
-    dLB_prev_position = dLB_position;
-    dRF_prev_position = dRF_position;
-    dRB_prev_position = dRB_position;
+    lastDistanceLeftFront = distanceLeftFront;
+    lastDistanceLeftBack = distanceLeftBack;
+    lastDistanceRightFront = distanceRightFront;
+    lastDistanceRightBack = distanceRightBack;
+    lastDistanceFront = distanceFront;
+    lastDistanceBack = distanceBack;
+    lastDistanceFrontPosition = distanceFrontPosition;
+    // lastDistanceBackPosition = distanceBackPosition;
+    lastDistanceLeftFrontPosition = distanceLeftFrontPosition;
+    lastDistanceLeftBackPosition = distanceLeftBackPosition;
+    lastDistanceRightFrontPosition = distanceRightFrontPosition;
+    lastDistanceRightBackPosition = distanceRightBackPosition;
 }
 
-void Map::updateGrid(float dLF, float dLB, float dRF, float dRB) {
-    updateGridWithSensor(sensorLF_X, sensorLF_Y, dLF, 270);
-    updateGridWithSensor(sensorLB_X, sensorLB_Y, dLB, 270);
-    updateGridWithSensor(sensorRF_X, sensorRF_Y, dRF, 90);
-    updateGridWithSensor(sensorRB_X, sensorRB_Y, dRB, 90);
+void Map::updateGrid(float distanceLeftFront, float distanceLeftBack, float distanceRightFront, float distanceRightBack) {
+    updateGridWithSensor(sensorLeftFront_X, sensorLeftFront_Y, distanceLeftFront, 270);
+    updateGridWithSensor(sensorLeftBack_X, sensorLeftBack_Y, distanceLeftBack, 270);
+    updateGridWithSensor(sensorRightFront_X, sensorRightFront_Y, distanceRightFront, 90);
+    updateGridWithSensor(sensorRightBack_X, sensorRightBack_Y, distanceRightBack, 90);
 
     setCell(robotX, robotY, ROBOT_LOCATION); // Mark the robot's current location
 }
@@ -218,15 +218,26 @@ void Map::markPath(int x1, int y1, int x2, int y2, uint8_t fillType) {
 }
 
 bool Map::isLeftBlocked() {
-    return leftBlocked;
+    return _isLeftBlocked;
 }
 
 bool Map::isRightBlocked() {
-    return rightBlocked;
+    return _isRightBlocked;
 }
 
 bool Map::isFrontBlocked() {
-    return frontBlocked;
+    return _isFrontBlocked;
+}
+
+bool Map::isRobotAtFinish() {
+    // if robot is in the lower 15% of the maze, it has reached the finishing box
+    if (robotY > height * 0.85) {
+        digitalWrite(LEDR, LOW); // Turn on the red LED to show it knows where it is
+        Serial.println("Finishing box has been reached");
+        return true;
+    } else {
+        return false;
+    }
 }
 
 // Debugging method

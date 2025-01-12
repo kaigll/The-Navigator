@@ -80,25 +80,41 @@ public:
      */
     void stopMotors();
 
+    /**
+     * @brief Attach the interrupt for both motor encoders
+     */
     void startCounting();
 
+    /**
+     * @brief Reset both encoder counts to zero
+     */
     void resetCount();
 
+    /**
+     * @brief Increment encoderCountA by 1, plus or minus depending on motor direction
+     */
     void countPulseA();
 
+    /**
+     * @brief Increment encoderCountB by 1, plus or minus depending on motor direction
+     */
     void countPulseB();
 
+    /**
+     * @brief Converts encoder count of motor A to distance in cm
+     * @returns Distance in cm
+     */
     float calculateDistanceA();
 
+    /**
+     * @brief Converts encoder count of motor B to distance in cm
+     * @returns Distance in cm
+     */
     float calculateDistanceB();
 
     float calculateSpeedA();
 
     float calculateSpeedB();
-
-    long int encoderCountA; // The encoder count for motor A
-    long int encoderCountB; // The encoder count for motor B
-    float speed_difference_fix = 1.04f;
 
 private:
     mbed::DigitalOut motorADir; // Digital pin for motor A direction control
@@ -111,8 +127,8 @@ private:
 
     long int shaftRevA;
     long int shaftRevB;
-    // long int encoderCountA;
-    // long int encoderCountB;
+    long int encoderCountA; // The encoder count for motor A
+    long int encoderCountB; // The encoder count for motor B
     volatile int lastEncoderCountA = 0;
     volatile int lastEncoderCountB = 0;
 

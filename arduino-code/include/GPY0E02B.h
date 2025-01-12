@@ -9,9 +9,9 @@
 #include <mbed.h>
 #include <rtos.h>
 
-class GPY0E02B {
+class IRSensor {
 public:
-    GPY0E02B();
+    IRSensor();
 
     /**
      * Select the appropriate bus on the I2C multiplexer.
@@ -29,13 +29,12 @@ public:
     /**
      * Measure the distance by triggering the sensor and reading the returned
      * echo.
-     * @param bus The bus number to select (0-3).
+     * @param bus The bus number to select (0-3) on the I2C multiplexer.
      * @returns Distance in centimeters, or -1 if an error occurs.
      */
     float measureDistanceCm(int bus);
 
 private:
-    byte _address;
     rtos::Mutex mutex; // Mutex to avoid simultaneous calls
 };
 
