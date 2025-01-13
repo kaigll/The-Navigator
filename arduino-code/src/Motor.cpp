@@ -88,7 +88,7 @@ void Motor::stopMotors() {
 }
 
 void Motor::startCounting() {
-    //timer.start();
+    // timer.start();
     encoderA.rise(mbed::callback(this, &Motor::countPulseA));
     encoderB.rise(mbed::callback(this, &Motor::countPulseB));
 }

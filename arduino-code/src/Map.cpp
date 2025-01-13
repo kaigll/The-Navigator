@@ -132,22 +132,15 @@ void Map::updateGrid(float distanceLeftFront, float distanceLeftBack, float dist
     if (lastDistanceBack = 0)
         lastDistanceBack = distanceBack;
 
+    // Average value of last 2 front measurements to determine if front is blocked
+    _isFrontBlocked = ((distanceFront + lastDistanceFront) * 0.5) < BLOCKED_MARGAIN;
+    // Average value of last 2 left front and left back measurements to determine if left side is blocked
+    _isLeftBlocked = ((distanceLeftFront + lastDistanceLeftFront) * 0.5) < BLOCKED_MARGAIN && ((distanceLeftBack + lastDistanceLeftBack) * 0.5) < BLOCKED_MARGAIN;
+    // Average value of last 2 right front and left back measurements to determine if right side is blocked
+    _isRightBlocked = ((distanceRightFront + lastDistanceRightFront) * 0.5) < BLOCKED_MARGAIN && ((distanceRightBack + lastDistanceRightBack) * 0.5) < BLOCKED_MARGAIN;
+
     // check with a margain of error the difference between current and previous messurements to connect what is predicted to be continuous walls
     float errorForWall = 2;
-
-    // check average of 2 measurements to check for blockage
-    if (((distanceFront + lastDistanceFront) * 0.5) < BLOCKED_MARGAIN)
-        _isFrontBlocked = true;
-    else
-        _isFrontBlocked = false;
-    if (((distanceLeftFront + lastDistanceLeftFront) * 0.5) < BLOCKED_MARGAIN && ((distanceLeftBack + lastDistanceLeftBack) * 0.5) < BLOCKED_MARGAIN)
-        _isLeftBlocked = true;
-    else
-        _isLeftBlocked = false;
-    if (((distanceRightFront + lastDistanceRightFront) * 0.5) < BLOCKED_MARGAIN && ((distanceRightBack + lastDistanceRightBack) * 0.5) < BLOCKED_MARGAIN)
-        _isRightBlocked = true;
-    else
-        _isRightBlocked = false;
 
     // check end of right side wall has not been reached
     if (!(fabs(lastDistanceLeftFront - distanceLeftFront) > errorForWall && fabs(distanceLeftFront - distanceLeftBack) > errorForWall)) {
@@ -240,7 +233,6 @@ bool Map::isRobotAtFinish() {
     }
 }
 
-// Debugging method
 void Map::printGrid() {
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
