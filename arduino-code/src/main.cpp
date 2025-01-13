@@ -64,6 +64,11 @@ void enqueueAction(RobotState state, float value, float speed) {
     Serial.println((String) "Addeed:" + state + " to action queue");
 }
 
+/**
+ * @brief Turn left a set amount of degrees
+ * @param angle in degrees (0-359)
+ * @param speed The speed to perform action at, range 0.0f -> 1.0f
+ */
 void turnLeft(float angle, float speed) {
     Serial.println((String) "Attempting to turn left " + angle + " degrees...");
 
@@ -90,6 +95,11 @@ void turnLeft(float angle, float speed) {
     robotState = IDLE;
 }
 
+/**
+ * @brief Turn right a set amount of degrees
+ * @param angle in degrees (0-359)
+ * @param speed The speed to perform action at, range 0.0f -> 1.0f
+ */
 void turnRight(float angle, float speed) {
     Serial.println((String) "Attempting to turn right " + angle + " degrees...");
 
@@ -117,6 +127,11 @@ void turnRight(float angle, float speed) {
     robotState = IDLE;
 }
 
+/**
+ * @brief Move forward a set distance and speed
+ * @param distance in cm
+ * @param speed The speed to perform action at, range 0.0f -> 1.0f
+ */
 void moveForward(float distance, float speed) {
     Serial.println((String) "Attempting to move forward " + distance + " cm...");
 
@@ -144,6 +159,11 @@ void moveForward(float distance, float speed) {
     robotState = IDLE;
 }
 
+/**
+ * @brief Move backwards a set distance and speed
+ * @param distance To travel in cm
+ * @param speed The speed to perform action at, range 0.0f -> 1.0f
+ */
 void moveBackwards(float distance, float speed) {
     Serial.println((String) "Attempting to move forward " + distance + " cm...");
 
@@ -171,6 +191,9 @@ void moveBackwards(float distance, float speed) {
     robotState = IDLE;
 }
 
+/**
+ * @brief Align to left side wall
+ */
 void alignLeft() {
     useActionQueue = false;  // Pause queued actions
     const float ERROR = 0.3; // Provide a margain of error to allow, accounting for sensor varience
@@ -196,6 +219,9 @@ void alignLeft() {
     useActionQueue = true; // Resume queued actions
 }
 
+/**
+ * @brief Align to right side wall 
+ */
 void alignRight() {
     useActionQueue = false;  // Pause queued actions
     const float ERROR = 0.3; // Provide a margain of error to allow, accounting for sensor varience
@@ -221,6 +247,9 @@ void alignRight() {
     useActionQueue = true; // Resume queued actions
 }
 
+/**
+ * @brief Chose the closest viable wall to align to.
+ */
 void align() {
     float distanceLeftFront = irBus.measureDistanceCm(0);
     float distanceLeftBack = irBus.measureDistanceCm(1);
@@ -308,11 +337,20 @@ void explore() {
     bool rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightBack > IR_FAIL);
 
     while (true) {
+        distanceFront = us1.measureDistanceCm();
+        distanceBack = us2.measureDistanceCm();
+        distanceLeftFront = irBus.measureDistanceCm(0);
+        distanceLeftBack = irBus.measureDistanceCm(1);
+        distanceRightFront = irBus.measureDistanceCm(2);
+        distanceRightBack = irBus.measureDistanceCm(3);
         frontClear = !(distanceFront < FAR_TOO_CLOSE_DISTANCE || distanceFront == US_FAIL);
         leftFrontClear = !(distanceLeftFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceLeftFront > IR_FAIL);
         leftBackClear = !(distanceLeftBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceLeftBack > IR_FAIL);
         rightFrontClear = !(distanceRightFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightFront > IR_FAIL);
         rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightBack > IR_FAIL);
+
+        mapInstance.updateGrid(distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack, distanceFront, distanceBack);
+        mapInstance.isRobotAtFinish();
 
         if (!frontClear) {
             // Blocked on front -> move backwards
