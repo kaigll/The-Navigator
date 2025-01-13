@@ -307,49 +307,50 @@ void explore() {
     bool rightFrontClear = !(distanceRightFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightFront > IR_FAIL);
     bool rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightBack > IR_FAIL);
 
-    if (!frontClear) {
-        // back up
-        moveBackwards(18, 0.5f);
-    } else {
-        if (leftFrontClear && leftBackClear) {
-            // turn left
-            turnLeft(90, 0.5f);
-            moveForward(18, 0.5f);
-            align();
-        } else if (leftFrontClear && !leftBackClear) {
-            // move forward
-            // ensure back is fully clear
-            // turn left
-            moveForward(18, 0.5f);
-            turnLeft(90, 0.5f);
-            moveForward(18, 0.5f);
-            align();
-        } else {
-            // Left side wall found
-            // is front okay for turn, accounting for robot size
-            // move front
-            if (distanceFront > 20) {
-                // given you have room to perform move forward
-                moveForward(18, 0.5f);
-            } else {
-                moveForward(distanceFront - 3, 0.5f);
-            }
-        }
+    while (true) {
+        frontClear = !(distanceFront < FAR_TOO_CLOSE_DISTANCE || distanceFront == US_FAIL);
+        leftFrontClear = !(distanceLeftFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceLeftFront > IR_FAIL);
+        leftBackClear = !(distanceLeftBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceLeftBack > IR_FAIL);
+        rightFrontClear = !(distanceRightFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightFront > IR_FAIL);
+        rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightBack > IR_FAIL);
 
-        if (rightFrontClear && rightBackClear) {
-            // turn right
-            turnRight(90, 0.5f);
-            moveForward(18, 0.5f);
-            align();
-        } else if (rightFrontClear && !rightBackClear) {
-            // move forward to clear back right
-            moveForward(18, 0.5f);
+        if (!frontClear) {
+            // Blocked on front -> move backwards
+            moveBackwards(1, 0.5f);
         } else {
-            // Right side wall found
-            // turn around
-            turnLeft(180, 0.5f);
-            moveForward(18, 0.5f);
-            align();
+            if (leftFrontClear && leftBackClear) {
+                // Clear on left -> turn left
+                turnLeft(90, 0.5f);
+                moveForward(18, 0.5f);
+                align();
+            } else if (leftFrontClear && !leftBackClear) {
+                // Close to clearing left wall -> move forward enought to fully clear -> turn left
+                moveForward(18, 0.5f);
+                turnLeft(90, 0.5f);
+                moveForward(10, 0.5f);
+                align();
+            } else {
+                // Blocked on left
+                // Check if the front is clear enough to move forward
+                if (distanceFront > 20) {
+                    // Clear in front -> move forward
+                    moveForward(5, 0.5f);
+                } else {
+                    if (rightFrontClear && rightBackClear) {
+                        // Clear on right -> turn right
+                        turnRight(90, 0.5f);
+                        moveForward(10, 0.5f);
+                        align();
+                    } else if (rightFrontClear && !rightBackClear) {
+                        // Close to clearing right wall -> move forward
+                        moveForward(18, 0.5f);
+                    } else {
+                        // Fully blocked on front, left and right -> turn 180
+                        turnRight(180, 0.5f);
+                        align();
+                    }
+                }
+            }
         }
     }
 }
