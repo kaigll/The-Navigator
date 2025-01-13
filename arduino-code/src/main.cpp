@@ -52,6 +52,10 @@ std::queue<Action> actionQueue; // Queue of actions to be performed sequentially
 std::list<Action> actionList;   // List of all actions to hopefully repeat.
 bool useActionQueue = true;     // boolean to pause following the action queue, used for multi-step action routines (e.g. alignLeft, alignRight)
 
+// --- Prototype functions ---
+void moveForward(float distance, float speed);
+void moveBackward(float distance, float speed);
+
 /**
  * @brief
  *
@@ -74,6 +78,7 @@ void turnLeft(float angle, float speed) {
 
     float partialCircumference = (angle / 360) * 13.8 * PI;
     float currentDistance = 0;
+    float previousDistance = 0;
     float distanceMotorA = motor.calculateDistanceA();
     float distanceMotorB = motor.calculateDistanceB();
 
@@ -81,9 +86,14 @@ void turnLeft(float angle, float speed) {
     motor.updateMotors(1, 1, speed, speed);
 
     while (currentDistance < partialCircumference) {
+        previousDistance = currentDistance;
+        thread_sleep_for(10);
         distanceMotorA = motor.calculateDistanceA();
         distanceMotorB = motor.calculateDistanceB();
         currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
+        if (previousDistance == currentDistance) {
+            break;
+        }
         motor.syncMotors();
         thread_sleep_for(10);
     }
@@ -105,6 +115,7 @@ void turnRight(float angle, float speed) {
 
     float partialCircumference = (angle / 360) * 13.8 * PI;
     float currentDistance = 0;
+    float previousDistance = 0;
     float distanceMotorA = motor.calculateDistanceA();
     float distanceMotorB = motor.calculateDistanceB();
 
@@ -112,9 +123,14 @@ void turnRight(float angle, float speed) {
     motor.updateMotors(0, 0, speed, speed);
 
     while (currentDistance < partialCircumference) {
+        previousDistance = currentDistance;
+        thread_sleep_for(10);
         distanceMotorA = motor.calculateDistanceA();
         distanceMotorB = motor.calculateDistanceB();
         currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
+        if (previousDistance == currentDistance) {
+            break;
+        }
         motor.syncMotors();
         thread_sleep_for(10);
     }
@@ -137,6 +153,7 @@ void moveForward(float distance, float speed) {
 
     float targetDistance = distance;
     float currentDistance = 0;
+    float previousDistance = 0;
     float distanceMotorA = motor.calculateDistanceA();
     float distanceMotorB = motor.calculateDistanceB();
 
@@ -144,17 +161,22 @@ void moveForward(float distance, float speed) {
     motor.updateMotors(0, 1, speed, speed);
 
     while (currentDistance < targetDistance) {
+        previousDistance = currentDistance;
+        thread_sleep_for(10);
         distanceMotorA = motor.calculateDistanceA();
         distanceMotorB = motor.calculateDistanceB();
         currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
+        if (currentDistance ==  previousDistance) {
+            moveBackward(1, 0.5f);
+            break;
+        }
         motor.syncMotors();
-        thread_sleep_for(10);
     }
 
     motor.stopMotors();
     thread_sleep_for(10);
     motor.resetCount();
-    mapInstance.moveRobotForward(distance);
+    mapInstance.moveRobotForward(currentDistance);
     Serial.println("Move complete.");
     robotState = IDLE;
 }
@@ -164,11 +186,12 @@ void moveForward(float distance, float speed) {
  * @param distance To travel in cm
  * @param speed The speed to perform action at, range 0.0f -> 1.0f
  */
-void moveBackwards(float distance, float speed) {
+void moveBackward(float distance, float speed) {
     Serial.println((String) "Attempting to move forward " + distance + " cm...");
 
     float targetDistance = distance;
     float currentDistance = 0;
+    float previousDistance = 0;
     float distanceMotorA = motor.calculateDistanceA();
     float distanceMotorB = motor.calculateDistanceB();
 
@@ -176,19 +199,31 @@ void moveBackwards(float distance, float speed) {
     motor.updateMotors(1, 0, speed, speed);
 
     while (currentDistance < targetDistance) {
+        previousDistance = currentDistance;
+        thread_sleep_for(10);
         distanceMotorA = motor.calculateDistanceA();
         distanceMotorB = motor.calculateDistanceB();
         currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
+        if (previousDistance == currentDistance) {
+            break;
+        }
         motor.syncMotors();
-        thread_sleep_for(10);
     }
 
     motor.stopMotors();
     thread_sleep_for(10);
     motor.resetCount();
-    mapInstance.moveRobotForward(distance);
+    mapInstance.moveRobotForward(currentDistance);
     Serial.println("Move complete.");
     robotState = IDLE;
+}
+
+mbed::Timeout timeout;
+volatile bool timeout_occurred = false;
+void onTimeout() { timeout_occurred = true; }
+void beginTimeout(float time) {
+    timeout.detach();
+    timeout.attach(&onTimeout, time);
 }
 
 /**
@@ -200,11 +235,17 @@ void alignLeft() {
     float distanceLeftFront = irBus.measureDistanceCm(0);
     float distanceLeftBack = irBus.measureDistanceCm(1);
     digitalWrite(LEDB, LOW); // Blue LED to show that its aligning
+    beginTimeout(5.0);
     // while the back and front are not equal,
     while (distanceLeftFront != distanceLeftBack) {
+        if (timeout_occurred) {
+            Serial.println("Timeout reached, exiting the loop.");
+            break;
+        }
+
         distanceLeftFront = irBus.measureDistanceCm(0);
         distanceLeftBack = irBus.measureDistanceCm(1);
-        if (distanceLeftFront == distanceLeftBack) {
+        if (abs(abs(distanceLeftFront) - abs(distanceLeftBack)) < ERROR) {
             break;
         }
         if (distanceLeftFront > distanceLeftBack + ERROR) {
@@ -220,7 +261,7 @@ void alignLeft() {
 }
 
 /**
- * @brief Align to right side wall 
+ * @brief Align to right side wall
  */
 void alignRight() {
     useActionQueue = false;  // Pause queued actions
@@ -228,11 +269,16 @@ void alignRight() {
     float distanceRightFront = irBus.measureDistanceCm(2);
     float distanceRightBack = irBus.measureDistanceCm(3);
     digitalWrite(LEDB, LOW); // Blue LED to show that its aligning
+    beginTimeout(5.0);
     // while the back and front are not equal,
     while (distanceRightFront != distanceRightBack) {
+        if (timeout_occurred) {
+            Serial.println("Timeout reached, exiting the loop.");
+            break;
+        }
         distanceRightFront = irBus.measureDistanceCm(2);
         distanceRightBack = irBus.measureDistanceCm(3);
-        if (distanceRightFront == distanceRightBack) {
+        if (abs(abs(distanceRightFront) - abs(distanceRightBack)) < ERROR) {
             break;
         }
         if (distanceRightFront > distanceRightBack + ERROR) {
@@ -258,10 +304,10 @@ void align() {
 
     const float significantError = 20;
 
-    if (distanceLeftFront < distanceRightFront && abs(distanceLeftFront - distanceLeftBack) > significantError) {
+    if (distanceLeftFront < distanceRightFront && (abs(distanceLeftFront - distanceLeftBack) < significantError && distanceLeftFront < significantError && distanceLeftBack < significantError)) {
         // if left side is closer AND if left side doesn't have too large of a difference.
         alignLeft();
-    } else if (distanceLeftFront > distanceRightFront && abs(distanceRightFront - distanceRightBack) < significantError) {
+    } else if (distanceLeftFront > distanceRightFront && (abs(distanceRightFront - distanceRightBack) < significantError && distanceRightFront < significantError && distanceRightBack < significantError)) {
         // if right side is closer AND if right side doesn't have too large of a difference.
         alignRight();
     }
@@ -281,7 +327,7 @@ void update() {
                 moveForward(action.value, action.speed);
                 break;
             case MOVING_BACKWARD:
-                moveBackwards(action.value, action.speed);
+                moveBackward(action.value, action.speed);
                 break;
             case TURNING_LEFT:
                 turnLeft(action.value, action.speed);
@@ -317,24 +363,11 @@ void mapUpdate() {
  * @brief Check all sensors, and update map based upon values
  */
 void explore() {
-    float distanceFront = us1.measureDistanceCm();
-    float distanceBack = us2.measureDistanceCm();
-    float distanceLeftFront = irBus.measureDistanceCm(0);
-    float distanceLeftBack = irBus.measureDistanceCm(1);
-    float distanceRightFront = irBus.measureDistanceCm(2);
-    float distanceRightBack = irBus.measureDistanceCm(3);
-    mapInstance.updateGrid(distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack, distanceFront, distanceBack);
-    mapInstance.isRobotAtFinish();
-
-    const float CLOSE_TO_SIDE_WALL_DISTANCE = 5;
+    float distanceFront, distanceBack, distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack;
+    const float CLOSE_TO_SIDE_WALL_DISTANCE = 15;
     const float FAR_TOO_CLOSE_DISTANCE = 1.3;
-    const float IR_FAIL = 63;
     const float US_FAIL = -1;
-    bool frontClear = !(distanceFront < FAR_TOO_CLOSE_DISTANCE || distanceFront == US_FAIL);
-    bool leftFrontClear = !(distanceLeftFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceLeftFront > IR_FAIL);
-    bool leftBackClear = !(distanceLeftBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceLeftBack > IR_FAIL);
-    bool rightFrontClear = !(distanceRightFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightFront > IR_FAIL);
-    bool rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightBack > IR_FAIL);
+    bool frontClear, leftFrontClear, leftBackClear, rightFrontClear, rightBackClear;
 
     while (true) {
         distanceFront = us1.measureDistanceCm();
@@ -344,40 +377,43 @@ void explore() {
         distanceRightFront = irBus.measureDistanceCm(2);
         distanceRightBack = irBus.measureDistanceCm(3);
         frontClear = !(distanceFront < FAR_TOO_CLOSE_DISTANCE || distanceFront == US_FAIL);
-        leftFrontClear = !(distanceLeftFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceLeftFront > IR_FAIL);
-        leftBackClear = !(distanceLeftBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceLeftBack > IR_FAIL);
-        rightFrontClear = !(distanceRightFront < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightFront > IR_FAIL);
-        rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE || distanceRightBack > IR_FAIL);
+        leftFrontClear = !(distanceLeftFront < 10);
+        leftBackClear = !(distanceLeftBack < CLOSE_TO_SIDE_WALL_DISTANCE);
+        rightFrontClear = !(distanceRightFront < CLOSE_TO_SIDE_WALL_DISTANCE);
+        rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE);
 
         mapInstance.updateGrid(distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack, distanceFront, distanceBack);
         mapInstance.isRobotAtFinish();
 
         if (!frontClear) {
             // Blocked on front -> move backwards
-            moveBackwards(1, 0.5f);
+            moveBackward(1, 0.5f);
         } else {
             if (leftFrontClear && leftBackClear) {
                 // Clear on left -> turn left
                 turnLeft(90, 0.5f);
-                moveForward(18, 0.5f);
+                if (distanceFront > 10) {
+                    // Clear in front -> move forward
+                    moveForward(25, 0.5f);
+                }
                 align();
-            } else if (leftFrontClear && !leftBackClear) {
+            } else if (leftFrontClear && !leftBackClear || !leftFrontClear && leftBackClear) {
                 // Close to clearing left wall -> move forward enought to fully clear -> turn left
-                moveForward(18, 0.5f);
-                turnLeft(90, 0.5f);
-                moveForward(10, 0.5f);
-                align();
+                moveForward(16, 0.5f);
             } else {
                 // Blocked on left
                 // Check if the front is clear enough to move forward
-                if (distanceFront > 20) {
+                if (distanceFront > 15) {
                     // Clear in front -> move forward
                     moveForward(5, 0.5f);
                 } else {
                     if (rightFrontClear && rightBackClear) {
                         // Clear on right -> turn right
                         turnRight(90, 0.5f);
-                        moveForward(10, 0.5f);
+                        if (distanceFront > 10) {
+                            // Clear in front -> move forward
+                            moveForward(25, 0.5f);
+                        }
                         align();
                     } else if (rightFrontClear && !rightBackClear) {
                         // Close to clearing right wall -> move forward
@@ -390,6 +426,7 @@ void explore() {
                 }
             }
         }
+        thread_sleep_for(100);
     }
 }
 
@@ -409,6 +446,7 @@ void setup() {
     thread_sleep_for(1000);
     float distanceBack = us2.measureDistanceCm();
     float distanceRightBack = irBus.measureDistanceCm(3);
+    align();
     mapInstance.identifyStartPosition(distanceBack, distanceRightBack);
 
     updateThread.start(update);
@@ -422,22 +460,6 @@ void setup() {
  * @brief Built in arduino loop function
  */
 void loop() {
-    /*mapUpdate();
-    if (actionQueue.empty()) {
-        if (mapInstance.isFrontBlocked()) {
-            if (mapInstance.isLeftBlocked() && !mapInstance.isRightBlocked()) {
-                enqueueAction(TURNING_RIGHT, 90, 0.5f);
-            } else if (!mapInstance.isLeftBlocked() && mapInstance.isRightBlocked()) {
-                enqueueAction(TURNING_LEFT, 90, 0.5f);
-            } else {
-                enqueueAction(TURNING_LEFT, 180, 0.5f);
-            }
-        } else if (!mapInstance.isLeftBlocked()) {
-            enqueueAction(MOVING_FORWARD, 6, 0.5f);
-            enqueueAction(TURNING_LEFT, 90, 0.5f);
-        }
-        enqueueAction(MOVING_FORWARD, 2, 0.5f);
-    }*/
-    Serial.println(irBus.measureDistanceCm(0));
+    explore();
     thread_sleep_for(10);
 }
