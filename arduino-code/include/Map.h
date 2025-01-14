@@ -7,11 +7,6 @@
 
 // --- Constants representing the state different points on the map ---
 
-const uint8_t FREE_SPACE = 0;
-const uint8_t OBSTACLE = 1;
-const uint8_t SEEN_LOCATION = 2;
-const uint8_t ROBOT_LOCATION = 3;
-
 class Map {
 public:
     Map(int width, int height, int cellSize);
@@ -79,6 +74,11 @@ public:
     void updateGrid(float distanceLeftFront, float distanceLeftBack, float distanceRightFront, float distanceRightBack);
 
     bool isRobotAtFinish();
+
+    const uint8_t FREE_SPACE = 0;
+    const uint8_t OBSTACLE = 1;
+    const uint8_t SEEN_LOCATION = 2;
+    const uint8_t ROBOT_LOCATION = 3;
 
 private:
     uint8_t *grid; // The full grid stored as a one-dimensional array
