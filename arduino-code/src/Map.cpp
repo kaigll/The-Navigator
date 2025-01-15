@@ -71,10 +71,12 @@ void Map::moveRobotForward(int distance) {
 
 void Map::rotateRobotLeft(int degrees) {
     robotAngle = (robotAngle + 360 - degrees) % 360; // Rotate anticlockwise
+    Serial.println((String)"Angle is: " + robotAngle);
 }
 
 void Map::rotateRobotRight(int degrees) {
     robotAngle = (robotAngle + degrees) % 360; // Rotate clockwise
+    Serial.println((String)"Angle is: " + robotAngle);
 }
 
 int Map::getRobotX() {

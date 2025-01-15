@@ -57,9 +57,13 @@ void Motor::updateMotors(float speedA, float speedB) {
 void Motor::syncMotors() {
     // if motor A is faster than motor B, stop motor A until distance has equalized
     // else if motor B is faster than motor A, stop motor B until distance has equalized
+    Util::beginTimeout(timeout, timeoutOccurred, 5.0);
     if (abs(encoderCountA) > abs(encoderCountB)) {
         stopMotorA();
         while (abs(encoderCountA) > abs(encoderCountB)) {
+            if (timeoutOccurred) {
+                break;
+            }
             // do nothing until motor B catches up
             thread_sleep_for(1);
         }
@@ -67,6 +71,9 @@ void Motor::syncMotors() {
     } else if (abs(encoderCountA) < abs(encoderCountB)) {
         stopMotorB();
         while (abs(encoderCountA) < abs(encoderCountB)) {
+            if (timeoutOccurred) {
+                break;
+            }
             // do nothing until motor A catches up
             thread_sleep_for(1);
         }

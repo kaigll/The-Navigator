@@ -6,6 +6,7 @@
 #define MOTOR_H
 
 #include <mbed.h>
+#include <Util.h>
 
 class Motor {
 public:
@@ -137,6 +138,8 @@ private:
     const int pulsesPerRevolution = 330;                 // The number of pulses from the encoder per full wheel revolution
 
     mbed::Timer timer;
+    mbed::Timeout timeout;
+    bool timeoutOccurred;
 };
 
 #endif
