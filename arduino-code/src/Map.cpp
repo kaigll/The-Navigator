@@ -114,8 +114,9 @@ void Map::updateGridWithSensor(float sensorX, float sensorY, float distance, flo
 }
 
 void Map::updateGrid(float distanceLeftFront, float distanceLeftBack, float distanceRightFront, float distanceRightBack, float distanceFront, float distanceBack) {
+    // Excuse the long winded nature of this, it is not finished or polished.
     std::pair<int, int> distanceFrontPosition = calculateGlobalPosition(sensorFront_X, sensorFront_Y, distanceFront, 0);
-    // std::pair<int, int> distanceBackPosition = calculateGlobalPosition(sensorBack_X, sensorB_Y, distanceBack, 180);
+    std::pair<int, int> distanceBackPosition = calculateGlobalPosition(sensorBack_X, sensorBack_Y, distanceBack, 180);
     std::pair<int, int> distanceLeftFrontPosition = calculateGlobalPosition(sensorLeftFront_X, sensorLeftFront_Y, distanceLeftFront, 270);
     std::pair<int, int> distanceLeftBackPosition = calculateGlobalPosition(sensorLeftBack_X, sensorLeftBack_Y, distanceLeftBack, 270);
     std::pair<int, int> distanceRightFrontPosition = calculateGlobalPosition(sensorRightFront_X, sensorRightFront_Y, distanceRightFront, 90);
@@ -144,6 +145,9 @@ void Map::updateGrid(float distanceLeftFront, float distanceLeftBack, float dist
     // check with a margain of error the difference between current and previous messurements to connect what is predicted to be continuous walls
     float errorForWall = 2;
 
+    // if front > (significant) back then you know the wall ends
+    // if back > (significant) front then you know new wall begins
+
     // check end of right side wall has not been reached
     if (!(fabs(lastDistanceLeftFront - distanceLeftFront) > errorForWall && fabs(distanceLeftFront - distanceLeftBack) > errorForWall)) {
         markPath(distanceLeftFrontPosition.first, distanceLeftFrontPosition.second, lastDistanceLeftFrontPosition.first, lastDistanceLeftFrontPosition.second, OBSTACLE);
@@ -152,8 +156,7 @@ void Map::updateGrid(float distanceLeftFront, float distanceLeftBack, float dist
     if (!(fabs(lastDistanceRightFront - distanceRightFront) > errorForWall && fabs(distanceRightFront - distanceRightBack) > errorForWall)) {
         markPath(distanceRightFrontPosition.first, distanceRightFrontPosition.second, lastDistanceRightFrontPosition.first, lastDistanceRightFrontPosition.second, OBSTACLE);
     }
-    // if front > (significant) back then you know the wall ends
-    // if back > (significant) front then you know new wall begins
+    
 
     setCell(robotX, robotY, ROBOT_LOCATION); // Mark the robot's current location
 
@@ -165,7 +168,7 @@ void Map::updateGrid(float distanceLeftFront, float distanceLeftBack, float dist
     lastDistanceFront = distanceFront;
     lastDistanceBack = distanceBack;
     lastDistanceFrontPosition = distanceFrontPosition;
-    // lastDistanceBackPosition = distanceBackPosition;
+    lastDistanceBackPosition = distanceBackPosition;
     lastDistanceLeftFrontPosition = distanceLeftFrontPosition;
     lastDistanceLeftBackPosition = distanceLeftBackPosition;
     lastDistanceRightFrontPosition = distanceRightFrontPosition;

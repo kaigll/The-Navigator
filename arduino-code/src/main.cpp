@@ -27,11 +27,9 @@ IRSensor irBus;
  */
 Motor motor(P0_4, P0_5, P0_27, P1_2);
 
-rtos::Thread updateThread; // Dedicated update thread for
+rtos::Thread performQueueThread; // Dedicated thread for when the performQueue method is being used
 
 Map mapInstance(150, 200, 1); // Initialise map
-
-// Util util;
 
 // Define all possible states
 enum RobotState {
@@ -57,8 +55,8 @@ struct Action {
 
 std::queue<Action> actionQueue; // Queue of actions to be performed sequentially.
 std::stack<Action> actionStack; // List of all actions to hopefully repeat.
-bool useActionQueue = true;     // boolean to pause following the action queue, used for multi-step action routines (e.g. alignLeft, alignRight)
-int actionStackLength = 0;
+bool useActionQueue = true;     // Boolean to pause following the action queue, used for multi-step action routines (e.g. alignLeft, alignRight)
+int actionStackLength = 0;      // Variable to keep track of the stack length
 
 // --- Prototype functions ---
 void moveForward(float distance, float speed);
@@ -90,6 +88,11 @@ void pushActionToStack(RobotState state, float value, float speed) {
     Serial.println((String) "Addeed:" + state + " to action queue");
 }
 
+/**
+ * @brief Combine back-to-back actions of the same type.
+ *
+ * @param actionStack the stack to perform the operation upon
+ */
 std::stack<Action> combineActions(std::stack<Action> actionStack) {
     std::stack<Action> tempStack;
     // Transfer elements from stack to tempStack
@@ -145,7 +148,7 @@ void turnLeft(float angle, float speed) {
         distanceMotorB = motor.calculateDistanceB();
         currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
         if (previousDistance == currentDistance) {
-            break;
+            break; // Break if not moving, probably stuck
         }
         motor.syncMotors();
         thread_sleep_for(10);
@@ -154,6 +157,7 @@ void turnLeft(float angle, float speed) {
     thread_sleep_for(10);
     motor.resetCount();
     if (abs(angle) != 1) {
+        // Discount all mapping that is for wall alignment
         mapInstance.rotateRobotLeft(angle);
         pushActionToStack(TURNING_LEFT, angle, speed);
     }
@@ -194,7 +198,7 @@ void turnRight(float angle, float speed) {
         distanceMotorB = motor.calculateDistanceB();
         currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
         if (previousDistance == currentDistance) {
-            break;
+            break; // Break if not moving, probably stuck
         }
         motor.syncMotors();
         thread_sleep_for(10);
@@ -233,6 +237,7 @@ void moveForward(float distance, float speed) {
     Util::beginTimeout(timeout, timeoutOccurred, 5.0);
     while (currentDistance < targetDistance) {
         if (timeoutOccurred) {
+            // Stuck -> move backwards -> check sensors and turn & move to avoid the obstacle blocking
             moveBackward(2, 0.5f);
             align();
             if (irBus.measureDistanceCm(0) > 10) {
@@ -252,7 +257,7 @@ void moveForward(float distance, float speed) {
         distanceMotorB = motor.calculateDistanceB();
         currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
         if (currentDistance == previousDistance) {
-            break;
+            break; // Break if not moving, probably stuck
         }
         motor.syncMotors();
     }
@@ -296,7 +301,7 @@ void moveBackward(float distance, float speed) {
         distanceMotorB = motor.calculateDistanceB();
         currentDistance = (abs(distanceMotorA) + abs(distanceMotorB)) / 2;
         if (previousDistance == currentDistance) {
-            break;
+            break; // Break if not moving, probably stuck
         }
         motor.syncMotors();
     }
@@ -388,12 +393,14 @@ void align() {
     float distanceRightFront = irBus.measureDistanceCm(2);
     float distanceRightBack = irBus.measureDistanceCm(3);
 
-    const float significantError = 20;
+    const float SIGNIFICANT_ERROR = 20;
 
-    if (distanceLeftFront < distanceRightFront && (abs(distanceLeftFront - distanceLeftBack) < significantError && distanceLeftFront < significantError && distanceLeftBack < significantError)) {
+    if (distanceLeftFront < distanceRightFront && (abs(distanceLeftFront - distanceLeftBack) < SIGNIFICANT_ERROR &&
+                                                   distanceLeftFront < SIGNIFICANT_ERROR && distanceLeftBack < SIGNIFICANT_ERROR)) {
         // if left side is closer AND if left side doesn't have too large of a difference.
         alignLeft();
-    } else if (distanceLeftFront > distanceRightFront && (abs(distanceRightFront - distanceRightBack) < significantError && distanceRightFront < significantError && distanceRightBack < significantError)) {
+    } else if (distanceLeftFront > distanceRightFront && (abs(distanceRightFront - distanceRightBack) < SIGNIFICANT_ERROR &&
+                                                          distanceRightFront < SIGNIFICANT_ERROR && distanceRightBack < SIGNIFICANT_ERROR)) {
         // if right side is closer AND if right side doesn't have too large of a difference.
         alignRight();
     }
@@ -401,8 +408,11 @@ void align() {
 
 /**
  * @brief The state machine (of sorts) handling the movement for when using the queue. Intended to be ran on a dedicated thread.
+ * This is designed for queing moves, and planning routes.
+ *
+ * Due to my logic pivoting the explore() function this is just here to show what I intended to do with the use of the map.
  */
-void update() {
+void performQueue() {
     while (true) {
         if (robotState == IDLE && !actionQueue.empty() && useActionQueue) {
             Action action = actionQueue.front();
@@ -433,6 +443,11 @@ void update() {
     }
 }
 
+/**
+ * @brief Perform the move stack in reverse, (e.g. turnLeft ---becomes---> turnRight)
+ *
+ * Similar in concept to performQueue, but in this case it takes over from explore to reverse the actions done.
+ */
 void reverseStack() {
     turnRight(180, 0.5f);
     actionStack = combineActions(actionStack);
@@ -481,19 +496,22 @@ void mapUpdate() {
 }
 
 /**
- * @brief Check all sensors, and update map based upon values
+ * @brief The main logic for navigation, this is a left wall following algorithm, with a preference for orienting towards the goal to prevent the common wall following pitfalls.
  */
 void explore() {
-    float distanceFront, distanceBack, distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack;
+    // constants for evaluating sensor data
     const float CLOSE_TO_SIDE_WALL_DISTANCE = 20;
     const float CLOSE_TO_FRONT_WALL_DISTANCE = CLOSE_TO_SIDE_WALL_DISTANCE + 2.5;
     const float FAR_TOO_CLOSE_DISTANCE = 3.0;
     const float US_FAIL = -1;
+    // pre-defining variables
+    float distanceFront, distanceBack, distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack;
     bool frontTouchingWall, frontClear, leftFrontClear, leftBackClear, rightFrontClear, rightBackClear;
     bool goalInFront, goalToLeft, goalToRight, goalBehind;
     bool onLeftSideOfMap;
 
     while (true) {
+        // Take distance measurements
         distanceFront = us1.measureDistanceCm();
         distanceBack = us2.measureDistanceCm();
         distanceLeftFront = irBus.measureDistanceCm(0);
@@ -501,22 +519,19 @@ void explore() {
         distanceRightFront = irBus.measureDistanceCm(2);
         distanceRightBack = irBus.measureDistanceCm(3);
 
+        // evaluate booleans for the navigation logic
         frontTouchingWall = distanceFront < FAR_TOO_CLOSE_DISTANCE || distanceFront == US_FAIL;
         frontClear = distanceFront > CLOSE_TO_FRONT_WALL_DISTANCE;
-        leftFrontClear = !(distanceLeftFront < CLOSE_TO_SIDE_WALL_DISTANCE);
-        leftBackClear = !(distanceLeftBack < CLOSE_TO_SIDE_WALL_DISTANCE);
-        rightFrontClear = !(distanceRightFront < CLOSE_TO_SIDE_WALL_DISTANCE);
-        rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE);
+        leftFrontClear = distanceLeftFront >= CLOSE_TO_SIDE_WALL_DISTANCE;
+        leftBackClear = distanceLeftBack >= CLOSE_TO_SIDE_WALL_DISTANCE;
+        rightFrontClear = distanceRightFront >= CLOSE_TO_SIDE_WALL_DISTANCE;
+        rightBackClear = distanceRightBack >= CLOSE_TO_SIDE_WALL_DISTANCE;
 
-        float robotAngleDeg = mapInstance.getRobotAngle();
-
-        goalInFront = robotAngleDeg == 90;
-        goalToLeft = robotAngleDeg == 180;
-        goalToRight = robotAngleDeg == 0;
-        goalBehind = robotAngleDeg == 270;
-        onLeftSideOfMap = mapInstance.getRobotX() > 90; // true when the robot is following on the left of the map
-
-        Serial.println((String)onLeftSideOfMap + ", " + goalToRight);
+        goalInFront = mapInstance.getRobotAngle() == 90; // 90 degrees is facing the goal
+        goalToLeft = mapInstance.getRobotAngle() == 180; // clockwise 90 degrees from goal
+        goalToRight = mapInstance.getRobotAngle() == 0;  // anticlockwise 90 degrees from goal
+        goalBehind = mapInstance.getRobotAngle() == 270; // 180 degrees from goal
+        onLeftSideOfMap = mapInstance.getRobotX() > 90;  // true when the robot is following on the left of the map
 
         mapInstance.updateGrid(distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack, distanceFront, distanceBack);
         if (mapInstance.isRobotAtFinish()) {
@@ -588,9 +603,7 @@ void explore() {
                 moveForward(distanceLeftBack + 20, 0.5f);
             }
             align();
-        } /*else if (!rightFrontClear && rightBackClear) {
-        }*/
-        else {
+        } else {
             // left & front & right blocked -> turn around
             turnRight(180, 0.5f);
             align();
@@ -604,25 +617,20 @@ void explore() {
  */
 void setup() {
     Serial.begin(9600);
-
-    delay(100);
-
+    delay(100); // Delay so serial monitor can pick up debugging messages within the setup
     Serial.println("Started The Navigator");
 
     motor.setup();
     motor.startCounting();
 
     thread_sleep_for(1000);
+    align();
     float distanceBack = us2.measureDistanceCm();
     float distanceRightBack = irBus.measureDistanceCm(3);
-    align();
     mapInstance.identifyStartPosition(distanceBack, distanceRightBack);
-
-    // updateThread.start(update);
-
+    // performQueueThread.start(performQueue); // start the thread for performing queue (commented because it is not in use for this version of the software)
     Serial.println("Setup complete");
-
-    thread_sleep_for(1000);
+    thread_sleep_for(1000); // delay before start loop
 }
 
 /**

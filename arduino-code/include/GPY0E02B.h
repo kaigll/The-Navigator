@@ -1,6 +1,6 @@
-/*
-    Custom library for GPY0E02B IR sensor
-*/
+/**
+ * Custom library for GPY0E02B IR sensor
+ */
 
 #ifndef GPY0E02B_H
 #define GPY0E02B_H

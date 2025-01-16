@@ -1,6 +1,6 @@
-/*
-    Custom library for TB6612FNG Motor
-*/
+/**
+ *   Custom library for TB6612FNG Motor
+ */
 
 #include "Motor.h"
 
