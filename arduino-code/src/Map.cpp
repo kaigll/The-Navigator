@@ -226,11 +226,13 @@ bool Map::isFrontBlocked() {
 
 bool Map::isRobotAtFinish() {
     // if robot is in the lower 15% of the maze, it has reached the finishing box
-    if (robotY > height * 0.85) {
+    if (robotY > height * 0.80 || robotY > 160) {
         digitalWrite(LEDR, LOW); // Turn on the red LED to show it knows where it is
         Serial.println("Finishing box has been reached");
         return true;
     } else {
+        Serial.println((String) "X = " + robotX);
+        Serial.println((String) "Y = " + robotY);
         return false;
     }
 }

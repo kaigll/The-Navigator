@@ -49,11 +49,16 @@ struct Action {
     RobotState state; // The type of action to perform
     float value;      // For turning this is the angle. For moving this is the distance
     float speed;      // The speed to perform action at, range 0.0f -> 1.0f
+
+    bool operator==(const Action &other) const {
+        return state == other.state && value == other.value && speed == other.speed;
+    }
 };
 
 std::queue<Action> actionQueue; // Queue of actions to be performed sequentially.
 std::stack<Action> actionStack; // List of all actions to hopefully repeat.
 bool useActionQueue = true;     // boolean to pause following the action queue, used for multi-step action routines (e.g. alignLeft, alignRight)
+int actionStackLength = 0;
 
 // --- Prototype functions ---
 void moveForward(float distance, float speed);
@@ -80,8 +85,31 @@ void enqueueAction(RobotState state, float value, float speed) {
  * @param speed The speed to perform action at, range 0.0f -> 1.0f
  */
 void pushActionToStack(RobotState state, float value, float speed) {
+    actionStackLength++;
     actionStack.push({state, value, speed});
     Serial.println((String) "Addeed:" + state + " to action queue");
+}
+
+std::stack<Action> combineActions(std::stack<Action> actionStack) {
+    std::stack<Action> tempStack;
+    // Transfer elements from stack to tempStack
+    while (!actionStack.empty()) {
+        tempStack.push(actionStack.top());
+        actionStack.pop();
+    }
+    // Combine consecutive actions of the same state
+    while (!tempStack.empty()) {
+        Action currentAction = tempStack.top();
+        tempStack.pop();
+        while (!tempStack.empty() && tempStack.top().state == currentAction.state) {
+            Action nextAction = tempStack.top();
+            tempStack.pop();
+            currentAction.value += nextAction.value;
+            currentAction.speed = nextAction.speed;
+        }
+        actionStack.push(currentAction);
+    }
+    return actionStack;
 }
 
 /**
@@ -90,7 +118,7 @@ void pushActionToStack(RobotState state, float value, float speed) {
  * @param speed The speed to perform action at, range 0.0f -> 1.0f
  */
 void turnLeft(float angle, float speed) {
-    Serial.println((String) "Attempting to turn left " + angle + " degrees...");
+    // Serial.println((String) "Attempting to turn left " + angle + " degrees...");
 
     float partialCircumference = (angle / 360) * 13.8 * PI;
     float currentDistance = 0;
@@ -106,7 +134,10 @@ void turnLeft(float angle, float speed) {
     Util::beginTimeout(timeout, timeoutOccurred, 5.0);
     while (currentDistance < partialCircumference) {
         if (timeoutOccurred) {
-            break;
+            motor.stopMotors();
+            motor.resetCount();
+            robotState = IDLE;
+            return;
         }
         previousDistance = currentDistance;
         thread_sleep_for(10);
@@ -126,7 +157,7 @@ void turnLeft(float angle, float speed) {
         mapInstance.rotateRobotLeft(angle);
         pushActionToStack(TURNING_LEFT, angle, speed);
     }
-    Serial.println("Turn complete.");
+    // Serial.println("Turn complete.");
     robotState = IDLE;
 }
 
@@ -136,7 +167,7 @@ void turnLeft(float angle, float speed) {
  * @param speed The speed to perform action at, range 0.0f -> 1.0f
  */
 void turnRight(float angle, float speed) {
-    Serial.println((String) "Attempting to turn right " + angle + " degrees...");
+    // Serial.println((String) "Attempting to turn right " + angle + " degrees...");
 
     float partialCircumference = (angle / 360) * 13.8 * PI;
     float currentDistance = 0;
@@ -152,7 +183,10 @@ void turnRight(float angle, float speed) {
     Util::beginTimeout(timeout, timeoutOccurred, 5.0);
     while (currentDistance < partialCircumference) {
         if (timeoutOccurred) {
-            break;
+            motor.stopMotors();
+            motor.resetCount();
+            robotState = IDLE;
+            return;
         }
         previousDistance = currentDistance;
         thread_sleep_for(10);
@@ -173,7 +207,7 @@ void turnRight(float angle, float speed) {
         mapInstance.rotateRobotRight(angle);
         pushActionToStack(TURNING_RIGHT, angle, speed);
     }
-    Serial.println("Turn complete.");
+    // Serial.println("Turn complete.");
     robotState = IDLE;
 }
 
@@ -183,7 +217,7 @@ void turnRight(float angle, float speed) {
  * @param speed The speed to perform action at, range 0.0f -> 1.0f
  */
 void moveForward(float distance, float speed) {
-    Serial.println((String) "Attempting to move forward " + distance + " cm...");
+    // Serial.println((String) "Attempting to move forward " + distance + " cm...");
 
     float targetDistance = distance;
     float currentDistance = 0;
@@ -201,6 +235,15 @@ void moveForward(float distance, float speed) {
         if (timeoutOccurred) {
             moveBackward(2, 0.5f);
             align();
+            if (irBus.measureDistanceCm(0) > 10) {
+                turnLeft(90, 0.5f);
+                moveForward(2, 0.5f);
+            } else if (irBus.measureDistanceCm(2) > 10) {
+                turnRight(90, 0.5f);
+                moveForward(2, 0.5f);
+            } else {
+                turnRight(180, 0.5f);
+            }
             break;
         }
         previousDistance = currentDistance;
@@ -219,7 +262,7 @@ void moveForward(float distance, float speed) {
     motor.resetCount();
     mapInstance.moveRobotForward(currentDistance);
     pushActionToStack(MOVING_FORWARD, currentDistance, speed);
-    Serial.println("Move complete.");
+    // Serial.println("Move complete.");
     robotState = IDLE;
 }
 
@@ -229,7 +272,7 @@ void moveForward(float distance, float speed) {
  * @param speed The speed to perform action at, range 0.0f -> 1.0f
  */
 void moveBackward(float distance, float speed) {
-    Serial.println((String) "Attempting to move forward " + distance + " cm...");
+    // Serial.println((String) "Attempting to move forward " + distance + " cm...");
 
     float targetDistance = distance;
     float currentDistance = 0;
@@ -263,7 +306,7 @@ void moveBackward(float distance, float speed) {
     motor.resetCount();
     mapInstance.moveRobotForward(currentDistance);
     pushActionToStack(MOVING_BACKWARD, currentDistance, speed);
-    Serial.println("Move complete.");
+    // Serial.println("Move complete.");
     robotState = IDLE;
 }
 
@@ -290,15 +333,15 @@ void alignLeft() {
         if (abs(abs(distanceLeftFront) - abs(distanceLeftBack)) < ERROR) {
             break;
         }
-        if (distanceLeftFront > distanceLeftBack + ERROR) {
+        if (distanceLeftFront > distanceLeftBack) {
             turnLeft(1, 0.25f); // correct for left front being too far away
-        } else if (distanceLeftBack > distanceLeftFront + ERROR) {
+        } else if (distanceLeftBack > distanceLeftFront) {
             turnRight(1, 0.25f); // correct for left back being too far away
         }
     }
 
     digitalWrite(LEDB, HIGH);
-    Serial.println("Alignment complete. Now aligned to left side wall");
+    // Serial.println("Alignment complete. Now aligned to left side wall");
     useActionQueue = true; // Resume queued actions
 }
 
@@ -324,15 +367,15 @@ void alignRight() {
         if (abs(abs(distanceRightFront) - abs(distanceRightBack)) < ERROR) {
             break;
         }
-        if (distanceRightFront > distanceRightBack + ERROR) {
+        if (distanceRightFront > distanceRightBack) {
             turnRight(1, 0.25f); // correct for right front being too far away
-        } else if (distanceRightBack > distanceRightFront + ERROR) {
+        } else if (distanceRightBack > distanceRightFront) {
             turnLeft(1, 0.25f); // correct for right back being too far away
         }
     }
 
     digitalWrite(LEDB, HIGH);
-    Serial.println("Alignment complete. Now aligned to right side wall");
+    // Serial.println("Alignment complete. Now aligned to right side wall");
     useActionQueue = true; // Resume queued actions
 }
 
@@ -392,6 +435,7 @@ void update() {
 
 void reverseStack() {
     turnRight(180, 0.5f);
+    actionStack = combineActions(actionStack);
     while (true) {
         if (robotState == IDLE && !actionStack.empty()) {
             Action action = actionStack.top();
@@ -441,11 +485,13 @@ void mapUpdate() {
  */
 void explore() {
     float distanceFront, distanceBack, distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack;
-    const float CLOSE_TO_SIDE_WALL_DISTANCE = 22;
+    const float CLOSE_TO_SIDE_WALL_DISTANCE = 20;
     const float CLOSE_TO_FRONT_WALL_DISTANCE = CLOSE_TO_SIDE_WALL_DISTANCE + 2.5;
     const float FAR_TOO_CLOSE_DISTANCE = 3.0;
     const float US_FAIL = -1;
-    bool frontTouchingWall, leftFrontClear, leftBackClear, rightFrontClear, rightBackClear;
+    bool frontTouchingWall, frontClear, leftFrontClear, leftBackClear, rightFrontClear, rightBackClear;
+    bool goalInFront, goalToLeft, goalToRight, goalBehind;
+    bool onLeftSideOfMap;
 
     while (true) {
         distanceFront = us1.measureDistanceCm();
@@ -454,232 +500,103 @@ void explore() {
         distanceLeftBack = irBus.measureDistanceCm(1);
         distanceRightFront = irBus.measureDistanceCm(2);
         distanceRightBack = irBus.measureDistanceCm(3);
+
         frontTouchingWall = distanceFront < FAR_TOO_CLOSE_DISTANCE || distanceFront == US_FAIL;
-        bool frontClear = distanceFront > CLOSE_TO_FRONT_WALL_DISTANCE;
+        frontClear = distanceFront > CLOSE_TO_FRONT_WALL_DISTANCE;
         leftFrontClear = !(distanceLeftFront < CLOSE_TO_SIDE_WALL_DISTANCE);
         leftBackClear = !(distanceLeftBack < CLOSE_TO_SIDE_WALL_DISTANCE);
         rightFrontClear = !(distanceRightFront < CLOSE_TO_SIDE_WALL_DISTANCE);
         rightBackClear = !(distanceRightBack < CLOSE_TO_SIDE_WALL_DISTANCE);
-        bool isLeftDiffBlockWidth = abs(distanceLeftFront - distanceLeftBack) < 10;
-        bool isRightDiffBlockWidth = abs(distanceRightFront - distanceRightBack) < 10;
 
         float robotAngleDeg = mapInstance.getRobotAngle();
-        int robotX = mapInstance.getRobotX();
-        int robotY = mapInstance.getRobotY();
-        bool facingTowardsGoal = robotAngleDeg == 90;
-        bool leftTurnToOrientToGoal = robotAngleDeg == 180;
-        bool rightTurnToOrientToGoal = robotAngleDeg == 0;
-        bool onLeftSide = robotX > 100; // relative height of map
+
+        goalInFront = robotAngleDeg == 90;
+        goalToLeft = robotAngleDeg == 180;
+        goalToRight = robotAngleDeg == 0;
+        goalBehind = robotAngleDeg == 270;
+        onLeftSideOfMap = mapInstance.getRobotX() > 90; // true when the robot is following on the left of the map
+
+        Serial.println((String)onLeftSideOfMap + ", " + goalToRight);
 
         mapInstance.updateGrid(distanceLeftFront, distanceLeftBack, distanceRightFront, distanceRightBack, distanceFront, distanceBack);
         if (mapInstance.isRobotAtFinish()) {
             reverseStack();
             break;
         }
+
         if (frontTouchingWall) {
+            // Blocked on front -> move backwards
             moveBackward(4, 0.5f);
             align();
-        } else {
-            if (facingTowardsGoal) {
-                if (frontClear) {
-                    // front clear towards goal -> move forward towards goal
-                    align();
-                    moveForward(8, 0.5f);
-                } else if (leftFrontClear && leftBackClear) {
-                    // front not clear -> turn to find a left side wall
-                    turnLeft(90, 0.5f);
-                    distanceFront = us1.measureDistanceCm();
-                    if (frontClear) {
-                        // Clear in front -> move forward
-                        moveForward(26, 0.5f);
-                    }
-                    align();
-                } else if (rightFrontClear && rightBackClear) {
-                    // front not clear and too close to left side -> turn right
-                    turnRight(90, 0.5f);
-                    distanceFront = us1.measureDistanceCm();
-                    if (frontClear) {
-                        // Clear in front -> move forward
-                        moveForward(26, 0.5f);
-                    }
-                } else {
-                    // Fully blocked on front, left and right -> turn 180
-                    turnRight(180, 0.5f);
-                    align();
-                }
-            } else if (leftTurnToOrientToGoal) {
-                if (leftFrontClear && leftBackClear) {
-                    // able to rotate to face goal on left -> turn left
-                    turnLeft(90, 0.5f);
-                    distanceFront = us1.measureDistanceCm();
-                    if (frontClear) {
-                        // Clear in front -> move forward
-                        moveForward(26, 0.5f);
-                    }
-                } else if (leftFrontClear && !leftBackClear) {
-                    // Close to clearing left wall -> move forward enought to fully clear -> turn left
-                    moveForward(18, 0.5f);
-                    turnLeft(90, 0.5f);
-                    distanceFront = us1.measureDistanceCm();
-                    if (frontClear) {
-                        // Clear in front -> move forward
-                        moveForward(26, 0.5f);
-                    }
-                    align();
-                } else if (!leftFrontClear && leftBackClear) {
-                    moveForward(18, 0.5f);
-                    align();
-                } else {
-                    if (frontClear) {
-                        moveForward(8, 0.5f);
-                        align();
-                    } else {
-                        if (rightFrontClear && rightBackClear) {
-                            turnRight(90, 0.5f);
-                            distanceFront = us1.measureDistanceCm();
-                            if (frontClear) {
-                                // Clear in front -> move forward
-                                moveForward(26, 0.5f);
-                            }
-                        } else if (rightFrontClear && !rightBackClear) {
-                            moveForward(18, 0.5f);
-                            align();
-                        } else {
-                            // Fully blocked on front, left and right -> turn 180
-                            turnRight(180, 0.5f);
-                            align();
-                        }
-                    }
-                }
-            } else if (rightTurnToOrientToGoal) {
-                if (frontClear) {
-                    moveForward(8, 0.5f);
-                } else {
-                    if (rightFrontClear && rightBackClear) {
-                        turnRight(90, 0.5f);
-                        distanceFront = us1.measureDistanceCm();
-                        if (frontClear) {
-                            // Clear in front -> move forward
-                            moveForward(26, 0.5f);
-                        }
-                    } else if (rightFrontClear && !rightBackClear) {
-                        moveForward(18, 0.5f);
-                    } else {
-                        // Fully blocked on front, left and right -> turn 180
-                        turnRight(180, 0.5f);
-                        align();
-                    }
-                }
-            } else {
-                if (rightFrontClear && rightBackClear) {
-                    turnRight(90, 0.5f);
-                    distanceFront = us1.measureDistanceCm();
-                    if (frontClear) {
-                        // Clear in front -> move forward
-                        moveForward(26, 0.5f);
-                    }
-                    align();
-                } else if (rightFrontClear && !rightBackClear) {
-                    moveForward(18, 0.5f);
-                    align();
-                } else {
-                    if (leftFrontClear && leftBackClear) {
-                        // able to rotate to face goal on left -> turn left
-                        turnLeft(90, 0.5f);
-                        distanceFront = us1.measureDistanceCm();
-                        if (frontClear) {
-                            // Clear in front -> move forward
-                            moveForward(26, 0.5f);
-                        }
-                        align();
-                    } else if (leftFrontClear && !leftBackClear) {
-                        // Close to clearing left wall -> move forward enought to fully clear -> turn left
-                        moveForward(18, 0.5f);
-                        turnLeft(90, 0.5f);
-                        distanceFront = us1.measureDistanceCm();
-                        if (frontClear) {
-                            // Clear in front -> move forward
-                            moveForward(26, 0.5f);
-                        }
-                        align();
-                    } else if (!leftFrontClear && leftBackClear) {
-                        moveForward(18, 0.5f);
-                        align();
-                    } else {
-                        if (frontClear) {
-                            moveForward(8, 0.5f);
-                            align();
-                        } else {
-                            turnRight(180, 0.5f);
-                            align();
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /*if (frontTouchingWall) {
-        // Blocked on front -> move backwards
-        moveBackward(4, 0.5f);
-        align();
-    } else {
-        if (facingTowardsGoal && frontClear) {
-            // Clear in front -> move forward
+        } else if ((goalInFront || goalToRight) && frontClear) {
+            // Clear in front and facing goal -> move forward
             align();
             moveForward(10, 0.5f);
-        } else {
-            if (leftFrontClear && leftBackClear && (leftTurnToOrientToGoal || !onLeftSide) && !rightTurnToOrientToGoal) {
-                // Clear on left -> turn left
-                turnLeft(90, 0.5f);
-                distanceFront = us1.measureDistanceCm();
-                if (frontClear) {
-                    // Clear in front -> move forward
-                    moveForward(26, 0.5f);
-                }
-                align();
-            } else if (leftFrontClear && !leftBackClear && (leftTurnToOrientToGoal || !onLeftSide || !rightTurnToOrientToGoal)) {
-                // Close to clearing left wall -> move forward enought to fully clear -> turn left
-                moveForward(18, 0.5f);
-                turnLeft(90, 0.5f);
-                distanceFront = us1.measureDistanceCm();
-                if (frontClear) {
-                    // Clear in front -> move forward
-                    moveForward(26, 0.5f);
-                }
-            } else if (!leftFrontClear && leftBackClear && (leftTurnToOrientToGoal || !onLeftSide || !rightTurnToOrientToGoal)) {
-                // Close to being parallel with new left side wall -> move forward to be beside it
-                moveForward(16, 0.5f);
-            } else {
-                // Blocked on left
-                // Check if the front is clear enough to move forward
-                if (frontClear) {
-                    // Clear in front -> move forward
-                    align();
-                    moveForward(8, 0.5f);
-                } else {
-                    if (rightFrontClear && rightBackClear) {
-                        // Clear on right -> turn right
-                        turnRight(90, 0.5f);
-                        distanceFront = us1.measureDistanceCm();
-                        if (frontClear) {
-                            // Clear in front -> move forward
-                            moveForward(26, 0.5f);
-                        }
-                        align();
-                    } else if (rightFrontClear && !rightBackClear) {
-                        // Close to clearing right wall -> move forward
-                        moveForward(18, 0.5f);
-                    } else {
-                        // Fully blocked on front, left and right -> turn 180
-                        turnRight(180, 0.5f);
-                        align();
-                    }
-                }
+        } else if ((!goalToRight || !onLeftSideOfMap) && leftFrontClear && leftBackClear) {
+            // Turning left will result in facing the goal
+            // OR not currently on left side of map (suggesting that the left wall is not being followed)
+            // Left turn okay
+            turnLeft(90, 0.5f);
+            align();
+            distanceFront = us1.measureDistanceCm(); // retake measurement on front for new orientation
+            frontClear = distanceFront > CLOSE_TO_FRONT_WALL_DISTANCE;
+            if (frontClear) {
+                // Clear in front -> move forward
+                moveForward(20, 0.5f);
             }
+            align();
+        } else if ((!goalToRight || !onLeftSideOfMap) && leftFrontClear && !leftBackClear) {
+            // Need to move forwards for left turn
+            moveForward(18, 0.5f);
+            turnLeft(90, 0.5f);
+            align();
+            distanceFront = us1.measureDistanceCm(); // retake measurement on front for new orientation
+            frontClear = distanceFront > CLOSE_TO_FRONT_WALL_DISTANCE;
+            if (frontClear) {
+                // Clear in front -> move forward
+                moveForward(distanceLeftBack + 20, 0.5f);
+            }
+            align();
+        } else if ((!goalToRight || !onLeftSideOfMap) && !leftFrontClear && leftBackClear) {
+            // Found a new left side wall to align to
+            moveForward(18, 0.5f);
+            align();
+        } else if (frontClear) {
+            // left blocked, not facing goal, front clear -> move forward
+            align();
+            moveForward(10, 0.5f);
+        } else if (rightFrontClear && rightBackClear) {
+            // left & front blocked, right clear -> turn right
+            turnRight(90, 0.5f);
+            align();
+            distanceFront = us1.measureDistanceCm(); // retake measurement on front for new orientation
+            frontClear = distanceFront > CLOSE_TO_FRONT_WALL_DISTANCE;
+            if (frontClear) {
+                // Clear in front -> move forward
+                moveForward(distanceLeftBack + 20, 0.5f);
+            }
+            align();
+        } else if (rightFrontClear && !rightBackClear) {
+            // left & front blocked, appreaching clearing on right
+            moveForward(18, 0.5f);
+            turnRight(90, 0.5f);
+            align();
+            distanceFront = us1.measureDistanceCm(); // retake measurement on front for new orientation
+            frontClear = distanceFront > CLOSE_TO_FRONT_WALL_DISTANCE;
+            if (frontClear) {
+                // Clear in front -> move forward
+                moveForward(distanceLeftBack + 20, 0.5f);
+            }
+            align();
+        } /*else if (!rightFrontClear && rightBackClear) {
+        }*/
+        else {
+            // left & front & right blocked -> turn around
+            turnRight(180, 0.5f);
+            align();
         }
-    }*/
-    thread_sleep_for(10);
+        thread_sleep_for(10);
+    }
 }
 
 /**
