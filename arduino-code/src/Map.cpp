@@ -8,13 +8,19 @@ Map::~Map() {
     delete[] grid;
 }
 
-void Map::initGrid() {
+void Map:: initGrid() {
     int byteWidth = (width + 1) / 2; // Width in bytes, each byte stores two cells
     grid = new uint8_t[height * byteWidth]();
 }
 
 void Map::setCell(int x, int y, uint8_t state) {
+    // Calculate the index in the 1D array (grid) from 2D coordinates (x, y)
+    // y * (width + 1) / 2: Convert y-coordinate to 1D position, accounting for cells arranged in half bytes
+    // x / 2: Convert x-coordinate to its position within a row, with each cell being half a byte
     int index = (y * (width + 1) / 2) + (x / 2);
+
+    // if x is even -> lower half
+    // if x is odd  -> upper half
     if (x % 2 == 0) {
         grid[index] = (grid[index] & 0xF0) | (state & 0x0F); // Set lower 4 bits
     } else {
@@ -23,7 +29,13 @@ void Map::setCell(int x, int y, uint8_t state) {
 }
 
 uint8_t Map::getCell(int x, int y) {
+    // Calculate the index in the 1D array (grid) from 2D coordinates (x, y)
+    // y * (width + 1) / 2: Convert y-coordinate to 1D position, accounting for cells arranged in half bytes
+    // x / 2: Convert x-coordinate to its position within a row, with each cell being half a byte
     int index = (y * (width + 1) / 2) + (x / 2);
+
+    // if x is even -> lower half
+    // if x is odd  -> upper half
     if (x % 2 == 0) {
         return grid[index] & 0x0F; // Get lower 4 bits
     } else {
@@ -71,12 +83,12 @@ void Map::moveRobotForward(int distance) {
 
 void Map::rotateRobotLeft(int degrees) {
     robotAngle = (robotAngle + 360 - degrees) % 360; // Rotate anticlockwise
-    Serial.println((String)"Angle is: " + robotAngle);
+    Serial.println((String) "Angle is: " + robotAngle);
 }
 
 void Map::rotateRobotRight(int degrees) {
     robotAngle = (robotAngle + degrees) % 360; // Rotate clockwise
-    Serial.println((String)"Angle is: " + robotAngle);
+    Serial.println((String) "Angle is: " + robotAngle);
 }
 
 int Map::getRobotX() {
@@ -156,7 +168,6 @@ void Map::updateGrid(float distanceLeftFront, float distanceLeftBack, float dist
     if (!(fabs(lastDistanceRightFront - distanceRightFront) > errorForWall && fabs(distanceRightFront - distanceRightBack) > errorForWall)) {
         markPath(distanceRightFrontPosition.first, distanceRightFrontPosition.second, lastDistanceRightFrontPosition.first, lastDistanceRightFrontPosition.second, OBSTACLE);
     }
-    
 
     setCell(robotX, robotY, ROBOT_LOCATION); // Mark the robot's current location
 
